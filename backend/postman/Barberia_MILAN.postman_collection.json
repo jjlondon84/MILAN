@@ -1,0 +1,1895 @@
+{
+  "info": {
+    "name": "Barbería MILAN API",
+    "description": "Colección para probar el backend de Barbería MILAN.\n\n1. Arranca el backend (http://localhost:8080).\n2. Ejecuta '1. Autenticación > Iniciar sesión' — el token se guarda solo.\n3. Recorre las carpetas en orden: los id creados se guardan en variables.\n\nDocumentación interactiva: http://localhost:8080/swagger-ui.html",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "tokenRecuperacion",
+      "value": ""
+    },
+    {
+      "key": "idServicio",
+      "value": "1"
+    },
+    {
+      "key": "idBarbero",
+      "value": "1"
+    },
+    {
+      "key": "idTurno",
+      "value": "1"
+    },
+    {
+      "key": "idAusencia",
+      "value": "1"
+    },
+    {
+      "key": "idCliente",
+      "value": "1"
+    },
+    {
+      "key": "idCita",
+      "value": "1"
+    },
+    {
+      "key": "idProducto",
+      "value": "1"
+    },
+    {
+      "key": "idCaja",
+      "value": "1"
+    },
+    {
+      "key": "idVenta",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Autenticación",
+      "description": "",
+      "item": [
+        {
+          "name": "Iniciar sesión (guarda el token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Devuelve el token. El script lo guarda en la variable {{token}} que usan todas las demás peticiones.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"admin\",\n  \"contrasena\": \"Milan2026*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login correcto', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "if (r.token) { pm.collectionVariables.set('token', r.token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear cuenta (registro público, rol barbero)",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreCompleto\": \"Juan Camilo Pérez\",\n  \"email\": \"juan.camilo@correo.com\",\n  \"nombreUsuario\": \"juan.perez\",\n  \"contrasena\": \"secreto1\",\n  \"confirmarContrasena\": \"secreto1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "registro"
+              ]
+            },
+            "description": "Crea una cuenta con rol barbero. Después inicia sesión con nombreUsuario y contrasena."
+          }
+        },
+        {
+          "name": "Usuario actual",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Crear primer administrador (solo si no hay usuarios)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/primer-admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "primer-admin"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"admin\",\n  \"contrasena\": \"Milan2026*\",\n  \"nombreCompleto\": \"Administrador MILAN\",\n  \"email\": \"admin@milanbarberia.co\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Olvidé mi contraseña (guarda el token de recuperación)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/recuperar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "recuperar"
+              ]
+            },
+            "description": "En desarrollo la respuesta trae tokenRecuperacion.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@milanbarberia.co\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.tokenRecuperacion) { pm.collectionVariables.set('tokenRecuperacion', r.tokenRecuperacion); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restablecer contraseña",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/restablecer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "restablecer"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{tokenRecuperacion}}\",\n  \"nuevaContrasena\": \"Milan2026*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Cambiar mi contraseña",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/contrasena",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "contrasena"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contrasenaActual\": \"Milan2026*\",\n  \"nuevaContrasena\": \"Milan2026*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Usuarios y roles (admin)",
+      "description": "",
+      "item": [
+        {
+          "name": "Listar usuarios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Crear usuario barbero",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"mateo\",\n  \"contrasena\": \"Barbero2026\",\n  \"idRol\": 2,\n  \"nombreCompleto\": \"Mateo Vélez\",\n  \"email\": \"mateo@milanbarberia.co\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Editar / desactivar usuario",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "2"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreCompleto\": \"Mateo Vélez\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Listar roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Dashboard y búsqueda",
+      "description": "",
+      "item": [
+        {
+          "name": "Indicadores del día",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Búsqueda global",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/buscar?q=ma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "ma"
+                }
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Servicios",
+      "description": "",
+      "item": [
+        {
+          "name": "Listar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "servicios"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Consultar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/servicios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "servicios",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Crear (guarda idServicio)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "servicios"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Afeitado clásico\",\n  \"categoria\": \"barba\",\n  \"precio\": 25000,\n  \"duracionMin\": 30,\n  \"porcentajeComision\": 40,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idServicio', pm.response.json().idServicio); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/servicios/{{idServicio}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "servicios",
+                "{{idServicio}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Afeitado clásico\",\n  \"categoria\": \"barba\",\n  \"precio\": 27000,\n  \"duracionMin\": 30,\n  \"porcentajeComision\": 40,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Eliminar",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/servicios/{{idServicio}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "servicios",
+                "{{idServicio}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Barberos, turnos y ausencias",
+      "description": "",
+      "item": [
+        {
+          "name": "Listar barberos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/barberos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "barberos"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Barberos activos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/barberos/activos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "barberos",
+                "activos"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Resumen del personal (turno, descanso, ausencia)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/barberos/resumen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "barberos",
+                "resumen"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Crear barbero (guarda idBarbero)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/barberos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "barberos"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documento\": \"1050505050\",\n  \"nombres\": \"Carlos\",\n  \"apellidos\": \"Ruiz\",\n  \"telefono\": \"3001112299\",\n  \"fechaIngreso\": \"2026-01-10\",\n  \"estado\": \"activo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idBarbero', pm.response.json().idBarbero); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar barbero",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/barberos/{{idBarbero}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "barberos",
+                "{{idBarbero}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documento\": \"1050505050\",\n  \"nombres\": \"Carlos\",\n  \"apellidos\": \"Ruiz Gómez\",\n  \"telefono\": \"3001112299\",\n  \"fechaIngreso\": \"2026-01-10\",\n  \"estado\": \"activo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Crear turno (1=lunes … 7=domingo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/turnos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "turnos"
+              ]
+            },
+            "description": "El día de la semana está calculado para mañana, así la cita de ejemplo funciona.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idBarbero\": {{idBarbero}},\n  \"diaSemana\": 4,\n  \"horaInicio\": \"09:00\",\n  \"horaFin\": \"18:00\",\n  \"descansoInicio\": \"13:00\",\n  \"descansoFin\": \"14:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idTurno', pm.response.json().idTurno); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Turnos del barbero",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/turnos/barbero/{{idBarbero}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "turnos",
+                "barbero",
+                "{{idBarbero}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Registrar ausencia",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ausencias",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ausencias"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idBarbero\": {{idBarbero}},\n  \"tipo\": \"vacaciones\",\n  \"fechaInicio\": \"2026-12-20\",\n  \"fechaFin\": \"2026-12-27\",\n  \"motivo\": \"Vacaciones de fin de año\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idAusencia', pm.response.json().idAusencia); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ausencias del barbero",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ausencias/barbero/{{idBarbero}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ausencias",
+                "barbero",
+                "{{idBarbero}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Eliminar ausencia",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ausencias/{{idAusencia}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ausencias",
+                "{{idAusencia}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Clientes",
+      "description": "",
+      "item": [
+        {
+          "name": "Listar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Resumen (visitas, última visita, próxima cita)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clientes/resumen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "resumen"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Buscar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clientes/buscar?q=juan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "juan"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Crear (guarda idCliente) — el correo se cifra con AES",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/clientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Juan\",\n  \"apellidos\": \"Pérez\",\n  \"telefono\": \"3009998877\",\n  \"email\": \"juan@correo.com\",\n  \"preferenciasCorte\": \"Degradado, máquina 2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idCliente', pm.response.json().idCliente); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/clientes/{{idCliente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "{{idCliente}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Juan\",\n  \"apellidos\": \"Pérez\",\n  \"telefono\": \"3009998877\",\n  \"email\": \"juan.perez@correo.com\",\n  \"preferenciasCorte\": \"Degradado bajo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Historial de citas del cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/cliente/{{idCliente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "cliente",
+                "{{idCliente}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Citas",
+      "description": "",
+      "item": [
+        {
+          "name": "Horarios libres",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/horarios-disponibles?idBarbero={{idBarbero}}&fecha=2026-11-26&idServicios=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "horarios-disponibles"
+              ],
+              "query": [
+                {
+                  "key": "idBarbero",
+                  "value": "{{idBarbero}}"
+                },
+                {
+                  "key": "fecha",
+                  "value": "2026-11-26"
+                },
+                {
+                  "key": "idServicios",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Verificar disponibilidad",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/disponibilidad?idBarbero={{idBarbero}}&fechaHoraInicio=2026-11-26T10:00:00&idServicios=1,3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "disponibilidad"
+              ],
+              "query": [
+                {
+                  "key": "idBarbero",
+                  "value": "{{idBarbero}}"
+                },
+                {
+                  "key": "fechaHoraInicio",
+                  "value": "2026-11-26T10:00:00"
+                },
+                {
+                  "key": "idServicios",
+                  "value": "1,3"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Agendar cita (guarda idCita)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            },
+            "description": "La fecha debe ser futura y estar dentro del turno del barbero.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idCliente\": {{idCliente}},\n  \"idBarbero\": {{idBarbero}},\n  \"fechaHoraInicio\": \"2026-11-26T10:00:00\",\n  \"idServicios\": [\n    1,\n    3\n  ],\n  \"observaciones\": \"Primera visita\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idCita', pm.response.json().idCita); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agenda de hoy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Agenda por rango y barbero",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas?idBarbero={{idBarbero}}&desde=2026-11-26&hasta=2026-11-26",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ],
+              "query": [
+                {
+                  "key": "idBarbero",
+                  "value": "{{idBarbero}}"
+                },
+                {
+                  "key": "desde",
+                  "value": "2026-11-26"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-11-26"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Consultar cita",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Reprogramar",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/reprogramar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "reprogramar"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fechaHoraInicio\": \"2026-11-26T11:00:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Confirmar",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/confirmar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "confirmar"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Iniciar atención",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/iniciar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "iniciar"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Productos e inventario",
+      "description": "",
+      "item": [
+        {
+          "name": "Listar productos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Crear producto de venta (guarda idProducto)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Pomada brillante\",\n  \"tipo\": \"venta\",\n  \"precioVenta\": 32000,\n  \"porcentajeComision\": 10,\n  \"stockActual\": 10,\n  \"stockMinimo\": 3,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idProducto', pm.response.json().idProducto); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar producto (el stock no cambia)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/productos/{{idProducto}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos",
+                "{{idProducto}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Pomada brillante\",\n  \"tipo\": \"venta\",\n  \"precioVenta\": 34000,\n  \"porcentajeComision\": 10,\n  \"stockMinimo\": 4,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Entrada de inventario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/inventario/movimientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inventario",
+                "movimientos"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProducto\": {{idProducto}},\n  \"tipo\": \"entrada\",\n  \"cantidad\": 5,\n  \"motivo\": \"Compra a proveedor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Salida de inventario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/inventario/movimientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inventario",
+                "movimientos"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idProducto\": {{idProducto}},\n  \"tipo\": \"salida\",\n  \"cantidad\": 1,\n  \"motivo\": \"Muestra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Movimientos del producto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventario/movimientos/{{idProducto}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inventario",
+                "movimientos",
+                "{{idProducto}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Alerta de stock bajo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventario/stock-bajo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inventario",
+                "stock-bajo"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Caja y ventas",
+      "description": "",
+      "item": [
+        {
+          "name": "Abrir caja (guarda idCaja)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/caja/abrir",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "caja",
+                "abrir"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"montoApertura\": 50000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idCaja', pm.response.json().idCaja); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado de la caja",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/caja/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "caja",
+                "estado"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Caja abierta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/caja/actual",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "caja",
+                "actual"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Cobrar cita + producto con pago mixto (guarda idVenta)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ventas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ventas"
+              ]
+            },
+            "description": "Total del ejemplo: Corte clásico 38.000 + Perfilado 28.000 + Pomada 34.000 = 100.000. Los pagos deben sumar EXACTAMENTE el total; ajústalos si cambiaste precios. La referencia se guarda cifrada (AES).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idCaja\": {{idCaja}},\n  \"idCita\": {{idCita}},\n  \"productos\": [\n    {\n      \"idProducto\": {{idProducto}},\n      \"cantidad\": 1\n    }\n  ],\n  \"pagos\": [\n    {\n      \"medioPago\": \"efectivo\",\n      \"monto\": 50000\n    },\n    {\n      \"medioPago\": \"tarjeta\",\n      \"monto\": 50000,\n      \"referencia\": \"VOUCHER-123\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('idVenta', pm.response.json().venta.idVenta); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Venta solo de productos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ventas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ventas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idCaja\": {{idCaja}},\n  \"idCliente\": {{idCliente}},\n  \"idBarbero\": {{idBarbero}},\n  \"productos\": [\n    {\n      \"idProducto\": {{idProducto}},\n      \"cantidad\": 1\n    }\n  ],\n  \"pagos\": [\n    {\n      \"medioPago\": \"transferencia\",\n      \"monto\": 34000,\n      \"referencia\": \"NEQUI-998\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ventas de la caja",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ventas?idCaja={{idCaja}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ventas"
+              ],
+              "query": [
+                {
+                  "key": "idCaja",
+                  "value": "{{idCaja}}"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Detalle de venta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ventas/{{idVenta}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ventas",
+                "{{idVenta}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Anular venta (devuelve stock)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ventas/{{idVenta}}/anular",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ventas",
+                "{{idVenta}}",
+                "anular"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Arqueo parcial",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/caja/{{idCaja}}/arqueo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "caja",
+                "{{idCaja}}",
+                "arqueo"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Cerrar caja (devuelve el arqueo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/caja/{{idCaja}}/cerrar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "caja",
+                "{{idCaja}}",
+                "cerrar"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"efectivoContado\": 100000,\n  \"observaciones\": \"Cierre del día\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Historial de cajas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/caja",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "caja"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Comisiones",
+      "description": "",
+      "item": [
+        {
+          "name": "Comisiones del mes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/comisiones?desde=2026-11-01&hasta=2026-12-25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "comisiones"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-11-01"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-12-25"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Comisiones con totales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/comisiones/resumen?desde=2026-11-01&hasta=2026-12-25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "comisiones",
+                "resumen"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-11-01"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-12-25"
+                }
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Cancelar / no asistió",
+      "description": "Acciones sobre citas pendientes o confirmadas.",
+      "item": [
+        {
+          "name": "Cancelar",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/cancelar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "cancelar"
+              ]
+            },
+            "description": "Úsalo con otra cita (la cita de ejemplo se cobra en la carpeta 9). Cambia {{idCita}} por el id que quieras."
+          }
+        },
+        {
+          "name": "Marcar no asistió",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/no-asistio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "no-asistio"
+              ]
+            },
+            "description": "Úsalo con otra cita (la cita de ejemplo se cobra en la carpeta 9). Cambia {{idCita}} por el id que quieras."
+          }
+        }
+      ]
+    }
+  ]
+}

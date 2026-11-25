@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barbería MILAN</title>
+<style>
+:root{--bg:#f4f1ec;--card:#fff;--tx:#1c1c1e;--mut:#6b6b70;--ac:#b8893b;--side:#1c1c1e;--bd:#e3ded5;--ok:#2e7d4f;--er:#b3382c}
+@media(prefers-color-scheme:dark){:root{--bg:#141415;--card:#1f1f22;--tx:#f1efea;--mut:#9b9ba1;--bd:#34343a;--side:#0c0c0d}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:8px 14px;background:var(--ac);color:#fff}
+button.ghost{background:transparent;color:var(--tx);border:1px solid var(--bd)}button.red{background:var(--er)}button.sm{padding:4px 9px;font-size:13px}
+input,select,textarea{font:inherit;width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 3px}label.ck{display:flex;gap:8px;align-items:center;color:var(--tx);margin:6px 0}label.ck input{width:auto}
+#app{display:flex;min-height:100vh}nav{width:200px;background:var(--side);color:#fff;padding:16px 10px;flex-shrink:0}
+nav h1{font-size:19px;color:var(--ac);margin:0 8px 18px;letter-spacing:2px}nav a{display:block;padding:9px 12px;border-radius:8px;color:#d8d5cd;cursor:pointer}
+nav a.on,nav a:hover{background:#2c2c30;color:#fff}nav .out{margin-top:20px;width:100%}
+main{flex:1;padding:22px;min-width:0}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.bar h2{margin:0;flex:1}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;overflow-x:auto}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--bd);white-space:nowrap}th{font-size:12px;color:var(--mut);text-transform:uppercase}
+td.a{display:flex;gap:6px}.tag{padding:2px 9px;border-radius:99px;font-size:12px;background:var(--bd)}.tag.programada{background:#dbe8f7;color:#1d4f91}.tag.completada,.tag.pagada,.tag.abierta{background:#d6efe0;color:var(--ok)}.tag.cancelada,.tag.anulada,.tag.no_asistio{background:#f6d9d5;color:var(--er)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}.grid div{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}.grid b{display:block;font-size:19px;margin-top:3px}
+.warn{background:#fff3d6;color:#7a5200;padding:10px 14px;border-radius:10px;margin-bottom:14px}
+dialog{border:0;border-radius:14px;padding:20px;width:min(440px,94vw);background:var(--card);color:var(--tx)}dialog::backdrop{background:#0008}dialog h3{margin:0 0 6px}.row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+#toast{position:fixed;bottom:18px;right:18px;background:#222;color:#fff;padding:11px 16px;border-radius:10px;max-width:80vw;display:none;z-index:9}#toast.er{background:var(--er)}
+#login{max-width:340px;margin:12vh auto;padding:0 16px}#login h1{color:var(--ac);letter-spacing:3px;text-align:center}.muted{color:var(--mut);font-size:13px;text-align:center;margin-top:14px;cursor:pointer;text-decoration:underline}
+@media(max-width:720px){#app{flex-direction:column}nav{width:auto;display:flex;flex-wrap:wrap;gap:4px;padding:10px}nav h1{width:100%;margin:0 0 6px}nav .out{width:auto;margin:0}}
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <h1>MILAN</h1>
+  <div class="card">
+    <label>Usuario</label><input id="lu" autocomplete="username">
+    <label>Contraseña</label><input id="lp" type="password" autocomplete="current-password">
+    <div class="row"><button id="lb" style="width:100%">Entrar</button></div>
+  </div>
+  <div class="muted" id="first">Primera vez: crear el administrador</div>
+</div>
+<div id="app" hidden><nav id="nav"></nav><main id="main"></main></div>
+<div id="toast"></div>
+
+<script>
+const $=(s,e=document)=>e.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n||0);
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const DIAS=['','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+let token=sessionStorage.getItem('tk'),user=JSON.parse(sessionStorage.getItem('us')||'null'),cur='citas',pendingCita=null,fecha=today(),fbar='';
+
+function toast(m,er){const t=$('#toast');t.textContent=m;t.className=er?'er':'';t.style.display='block';clearTimeout(t.h);t.h=setTimeout(()=>t.style.display='none',er?6000:2500)}
+async function api(m,p,b){
+  const r=await fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:b?JSON.stringify(b):undefined});
+  const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}
+  if(!r.ok){if(r.status===401&&token){logout();}
+    throw new Error((d&&d.error||'Error '+r.status)+(d&&d.campos?': '+Object.entries(d.campos).map(([k,v])=>k+' '+v).join(', '):''))}
+  return d}
+const run=async f=>{try{await f()}catch(e){toast(e.message,1)}};
+
+/* ---------- formularios en ventana ---------- */
+function fld(f,v){const[n,l,t='text',o]=f;
+  if(t==='checkbox')return`<label class=ck><input type=checkbox name=${n} ${v?'checked':''}>${l}</label>`;
+  if(t==='checks')return`<label>${l}</label>`+o.map(([id,x])=>`<label class=ck><input type=checkbox name=${n} value=${id}>${esc(x)}</label>`).join('');
+  if(t==='select')return`<label>${l}</label><select name=${n}>${o.map(([id,x])=>`<option value="${esc(id)}" ${String(id)===String(v??'')?'selected':''}>${esc(x)}</option>`).join('')}</select>`;
+  if(t==='textarea')return`<label>${l}</label><textarea name=${n} rows=2>${esc(v)}</textarea>`;
+  return`<label>${l}</label><input name=${n} type=${t} step=any value="${esc(v)}">`}
+function form(title,fields,vals,ok,btn='Guardar'){
+  const d=document.createElement('dialog');
+  d.innerHTML=`<form><h3>${title}</h3>${fields.map(f=>fld(f,vals[f[0]])).join('')}<div class=row><button type=button class=ghost>Cancelar</button><button>${btn}</button></div></form>`;
+  document.body.append(d);d.showModal();$('.ghost',d).onclick=()=>{d.close();d.remove()};
+  $('form',d).onsubmit=e=>{e.preventDefault();const o={};
+    for(const[n,,t]of fields){if(t==='checkbox')o[n]=d.querySelector(`[name=${n}]`).checked;
+      else if(t==='checks')o[n]=[...d.querySelectorAll(`[name=${n}]:checked`)].map(x=>+x.value);
+      else{const v=d.querySelector(`[name=${n}]`).value;o[n]=v===''?null:t==='number'?+v:v}}
+    run(async()=>{await ok(o);d.close();d.remove();go(cur)})}}
+const opts=(rows,id,lab,vacio)=>(vacio?[['',vacio]]:[]).concat(rows.map(r=>[r[id],typeof lab==='function'?lab(r):r[lab]]));
+const nom=r=>r.nombres+' '+r.apellidos;
+
+/* ---------- CRUD genérico ---------- */
+const CRUD={
+ clientes:{t:'Clientes',u:'/clientes',id:'idCliente',cols:[['nombres','Nombres'],['apellidos','Apellidos'],['telefono','Teléfono'],['email','Email'],['preferenciasCorte','Preferencias']],
+  f:()=>[['nombres','Nombres'],['apellidos','Apellidos'],['telefono','Teléfono'],['email','Email','email'],['preferenciasCorte','Preferencias de corte','textarea']],search:1},
+ barberos:{t:'Barberos',u:'/barberos',id:'idBarbero',cols:[['documento','Documento'],['nombres','Nombres'],['apellidos','Apellidos'],['telefono','Teléfono'],['fechaIngreso','Ingreso'],['estado','Estado']],
+  f:()=>[['documento','Documento'],['nombres','Nombres'],['apellidos','Apellidos'],['telefono','Teléfono'],['fechaIngreso','Fecha de ingreso','date'],['estado','Estado','select',[['activo','Activo'],['inactivo','Inactivo']]]]},
+ servicios:{t:'Servicios',u:'/servicios',id:'idServicio',cols:[['nombre','Servicio'],['categoria','Categoría'],['precio','Precio'],['duracionMin','Minutos'],['porcentajeComision','Comisión'],['activo','Activo']],
+  f:()=>[['nombre','Nombre'],['categoria','Categoría','select',[['corte','Corte'],['barba','Barba'],['estetico','Estético']]],['precio','Precio','number'],['duracionMin','Duración (minutos)','number'],['porcentajeComision','% de comisión','number'],['activo','Activo','checkbox']]},
+ productos:{t:'Productos e inventario',u:'/productos',id:'idProducto',cols:[['nombre','Producto'],['tipo','Tipo'],['precioVenta','Precio'],['porcentajeComision','Comisión'],['stockActual','Stock'],['stockMinimo','Mínimo'],['activo','Activo']],
+  f:n=>[['nombre','Nombre'],['tipo','Tipo','select',[['venta','Venta'],['insumo','Insumo']]],['precioVenta','Precio de venta (solo productos de venta)','number'],['porcentajeComision','% de comisión','number'],...(n?[['stockActual','Stock inicial','number']]:[]),['stockMinimo','Stock mínimo','number'],['activo','Activo','checkbox']],
+  extra:[['Stock',p=>form('Movimiento: '+p.nombre,[['tipo','Tipo','select',[['entrada','Entrada (compra)'],['salida','Salida (consumo / merma)']]],['cantidad','Cantidad','number'],['motivo','Motivo']],{},o=>api('POST','/inventario/movimientos',{...o,idProducto:p.idProducto}),'Registrar')]]},
+ turnos:{t:'Horarios de barberos',u:'/turnos',id:'idTurno',b:1,cols:[['idBarbero','Barbero'],['diaSemana','Día'],['horaInicio','Entrada'],['horaFin','Salida'],['descansoInicio','Descanso desde'],['descansoFin','Descanso hasta']],
+  f:(n,B)=>[['idBarbero','Barbero','select',opts(B,'idBarbero',nom)],['diaSemana','Día','select',DIAS.slice(1).map((d,i)=>[i+1,d])],['horaInicio','Hora de entrada','time'],['horaFin','Hora de salida','time'],['descansoInicio','Inicio del descanso','time'],['descansoFin','Fin del descanso','time']]},
+ ausencias:{t:'Licencias y días libres',u:'/ausencias',id:'idAusencia',b:1,cols:[['idBarbero','Barbero'],['tipo','Tipo'],['fechaInicio','Desde'],['fechaFin','Hasta'],['motivo','Motivo']],
+  f:(n,B)=>[['idBarbero','Barbero','select',opts(B,'idBarbero',nom)],['tipo','Tipo','select',[['licencia','Licencia'],['dia_libre','Día libre'],['incapacidad','Incapacidad'],['vacaciones','Vacaciones']]],['fechaInicio','Desde','date'],['fechaFin','Hasta','date'],['motivo','Motivo']]}
+};
+function cell(k,v,r,BM){
+  if(k==='idBarbero')return esc(BM[v]);if(k==='diaSemana')return DIAS[v];
+  if(typeof v==='boolean')return v?'Sí':'No';if(v==null)return'';
+  if(k==='precio'||k==='precioVenta')return money(v);if(k.endsWith('Comision'))return v+'%';
+  if(/^(horaInicio|horaFin|descanso)/.test(k))return String(v).slice(0,5);
+  if(k==='stockActual'&&r.stockActual<=r.stockMinimo)return`<b style="color:var(--er)">${v}</b>`;return esc(v)}
+async function crud(key){const c=CRUD[key],m=$('#main');
+  let rows=await api('GET',c.u),B=[],q='';
+  if(c.b||key==='turnos'||key==='ausencias')B=await api('GET','/barberos');
+  const BM=Object.fromEntries(B.map(b=>[b.idBarbero,nom(b)]));
+  let alerta='';if(key==='productos'){const s=await api('GET','/inventario/stock-bajo');if(s.length)alerta=`<div class=warn>⚠ Stock bajo: ${s.map(x=>esc(x.nombre)+' ('+x.stock_actual+')').join(', ')}</div>`}
+  const pinta=()=>{const rs=q?rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)):rows;
+    $('#tb').innerHTML=rs.map(r=>`<tr>${c.cols.map(([k])=>`<td>${cell(k,r[k],r,BM)}</td>`).join('')}<td class=a>${(c.extra||[]).map((e,i)=>`<button class="sm ghost" data-x=${i} data-id=${r[c.id]}>${e[0]}</button>`).join('')}<button class="sm ghost" data-e=${r[c.id]}>Editar</button><button class="sm red" data-d=${r[c.id]}>Borrar</button></td></tr>`).join('')||'<tr><td colspan=9>Sin registros</td></tr>'};
+  m.innerHTML=`${alerta}<div class=bar><h2>${c.t}</h2>${c.search?'<input id=q placeholder="Buscar..." style="max-width:220px">':''}<button id=nw>+ Nuevo</button></div><div class=card><table><thead><tr>${c.cols.map(x=>`<th>${x[1]}</th>`).join('')}<th></th></tr></thead><tbody id=tb></tbody></table></div>`;
+  pinta();if($('#q'))$('#q').oninput=e=>{q=e.target.value.toLowerCase();pinta()};
+  $('#nw').onclick=()=>form('Nuevo',c.f(true,B),{activo:true,estado:'activo'},o=>api('POST',c.u,o));
+  $('#tb').onclick=e=>{const b=e.target.closest('button');if(!b)return;const find=id=>rows.find(r=>r[c.id]==id);
+    if(b.dataset.e)form('Editar',c.f(false,B),find(b.dataset.e),o=>api('PUT',c.u+'/'+b.dataset.e,{...find(b.dataset.e),...o}));
+    if(b.dataset.d&&confirm('¿Eliminar este registro?'))run(async()=>{await api('DELETE',c.u+'/'+b.dataset.d);toast('Eliminado');go(cur)});
+    if(b.dataset.x)c.extra[b.dataset.x][1](find(b.dataset.id))}}
+
+/* ---------- citas ---------- */
+async function citas(){const m=$('#main');
+  const [B,C,S]=await Promise.all([api('GET','/barberos'),api('GET','/clientes'),api('GET','/servicios')]);
+  const rows=await api('GET',`/citas?desde=${fecha}&hasta=${fecha}${fbar?'&idBarbero='+fbar:''}`);
+  m.innerHTML=`<div class=bar><h2>Agenda</h2><input type=date id=fd value=${fecha} style="width:auto"><select id=fb style="width:auto">${opts(B,'idBarbero',nom,'Todos los barberos').map(([i,l])=>`<option value="${i}" ${i==fbar?'selected':''}>${esc(l)}</option>`).join('')}</select><button id=nw>+ Nueva cita</button></div>
+  <div class=card><table><thead><tr><th>Hora</th><th>Cliente</th><th>Barbero</th><th>Servicios</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.fechaHoraInicio.slice(11,16)}–${r.fechaHoraFin.slice(11,16)}</td><td>${esc(r.cliente)}</td><td>${esc(r.barbero)}</td><td>${esc(r.servicios.map(s=>s.nombre).join(' + '))}</td><td>${money(r.total)}</td><td><span class="tag ${r.estado}">${r.estado.replace('_',' ')}</span></td><td class=a>${r.estado==='programada'?`<button class=sm data-c=${r.idCita}>Cobrar</button><button class="sm ghost" data-r=${r.idCita}>Reprogramar</button><button class="sm ghost" data-n=${r.idCita}>No asistió</button><button class="sm red" data-x=${r.idCita}>Cancelar</button>`:''}</td></tr>`).join('')||'<tr><td colspan=7>No hay citas este día</td></tr>'}</tbody></table></div>`;
+  $('#fd').onchange=e=>{fecha=e.target.value;go('citas')};$('#fb').onchange=e=>{fbar=e.target.value;go('citas')};
+  $('#nw').onclick=()=>form('Nueva cita',[['idCliente','Cliente','select',opts(C,'idCliente',nom)],['idBarbero','Barbero','select',opts(B.filter(b=>b.estado==='activo'),'idBarbero',nom)],['fechaHoraInicio','Fecha y hora','datetime-local'],['idServicios','Servicios','checks',S.filter(s=>s.activo).map(s=>[s.idServicio,`${s.nombre} (${s.duracionMin} min · ${money(s.precio)})`])],['observaciones','Observaciones']],{},o=>{o.idCliente=+o.idCliente;o.idBarbero=+o.idBarbero;fecha=o.fechaHoraInicio.slice(0,10);return api('POST','/citas',o)});
+  m.querySelector('tbody').onclick=e=>{const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+    if(d.c){pendingCita=+d.c;go('caja')}
+    if(d.r)form('Reprogramar',[['fechaHoraInicio','Nueva fecha y hora','datetime-local'],['idBarbero','Barbero','select',opts(B.filter(x=>x.estado==='activo'),'idBarbero',nom,'(el mismo)')]],{},o=>api('PUT',`/citas/${d.r}/reprogramar`,{fechaHoraInicio:o.fechaHoraInicio,idBarbero:o.idBarbero?+o.idBarbero:null}));
+    if(d.x&&confirm('¿Cancelar la cita?'))run(async()=>{await api('PATCH',`/citas/${d.x}/cancelar`);toast('Cita cancelada');go('citas')});
+    if(d.n)run(async()=>{await api('PATCH',`/citas/${d.n}/no-asistio`);go('citas')})}}
+
+/* ---------- caja y ventas ---------- */
+function resumen(a){return`<div class=grid><div>Apertura<b>${money(a.monto_apertura)}</b></div><div>Efectivo<b>${money(a.total_efectivo)}</b></div><div>Transferencia<b>${money(a.total_transferencia)}</b></div><div>Tarjeta<b>${money(a.total_tarjeta)}</b></div><div>Total vendido<b>${money(a.total_vendido)}</b></div><div>Efectivo esperado<b>${money(a.efectivo_esperado)}</b></div>${a.efectivo_contado!=null?`<div>Contado<b>${money(a.efectivo_contado)}</b></div><div>Diferencia<b style="color:var(${a.diferencia==0?'--ok':'--er'})">${money(a.diferencia)}</b></div>`:''}</div>`}
+async function caja(){const m=$('#main');let c=null;try{c=await api('GET','/caja/actual')}catch{}
+  if(!c){const hist=await api('GET','/caja');
+    m.innerHTML=`<div class=bar><h2>Caja</h2><button id=ab>Abrir caja</button></div><div class=card><table><thead><tr><th>Apertura</th><th>Cierre</th><th>Estado</th><th></th></tr></thead><tbody>${hist.map(h=>`<tr><td>${h.fechaHoraApertura.replace('T',' ').slice(0,16)}</td><td>${(h.fechaHoraCierre||'').replace('T',' ').slice(0,16)}</td><td><span class="tag ${h.estado}">${h.estado}</span></td><td><button class="sm ghost" data-a=${h.idCaja}>Ver arqueo</button></td></tr>`).join('')||'<tr><td colspan=4>Aún no hay cajas</td></tr>'}</tbody></table></div><div id=ar></div>`;
+    $('#ab').onclick=()=>form('Abrir caja',[['montoApertura','Efectivo inicial en caja','number']],{montoApertura:0},o=>api('POST','/caja/abrir',o),'Abrir');
+    m.querySelector('tbody').onclick=e=>{const b=e.target.closest('button');if(b)run(async()=>{$('#ar').innerHTML='<h3>Arqueo</h3>'+resumen(await api('GET',`/caja/${b.dataset.a}/arqueo`))})};return}
+  const [a,vs]=await Promise.all([api('GET',`/caja/${c.idCaja}/arqueo`),api('GET','/ventas?idCaja='+c.idCaja)]);
+  m.innerHTML=`<div class=bar><h2>Caja abierta</h2><button id=nv>+ Nueva venta</button><button id=cc class=red>Cerrar caja</button></div>${resumen(a)}<div class=card><table><thead><tr><th>#</th><th>Hora</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody>${vs.map(v=>`<tr><td>${v.idVenta}</td><td>${v.fechaHora.slice(11,16)}</td><td>${money(v.total)}</td><td><span class="tag ${v.estado}">${v.estado}</span></td><td>${v.estado==='pagada'?`<button class="sm red" data-v=${v.idVenta}>Anular</button>`:''}</td></tr>`).join('')||'<tr><td colspan=5>Sin ventas todavía</td></tr>'}</tbody></table></div>`;
+  $('#nv').onclick=()=>venta(c);
+  $('#cc').onclick=()=>form('Cerrar caja',[['efectivoContado','Efectivo contado en caja','number'],['observaciones','Observaciones']],{},async o=>{const r=await api('POST',`/caja/${c.idCaja}/cerrar`,o);toast(r.diferencia==0?'Caja cuadrada ✔':'Diferencia de '+money(r.diferencia),r.diferencia!=0)},'Cerrar');
+  m.querySelector('tbody').onclick=e=>{const b=e.target.closest('button');if(b&&confirm('¿Anular la venta?'))run(async()=>{await api('PATCH',`/ventas/${b.dataset.v}/anular`);toast('Venta anulada');go('caja')})};
+  if(pendingCita)venta(c)}
+async function venta(c){const [B,P,ct]=await Promise.all([api('GET','/barberos'),api('GET','/productos'),api('GET',`/citas?desde=${today()}&hasta=${today()}`)]);
+  const pend=ct.filter(x=>x.estado==='programada'),PV=P.filter(p=>p.tipo==='venta'&&p.activo&&p.stockActual>0);
+  const f=[['idCita','Cita a cobrar','select',opts(pend,'idCita',x=>`${x.fechaHoraInicio.slice(11,16)} ${x.cliente} · ${money(x.total)}`,'Sin cita (solo productos)')],['idBarbero','Barbero que vende productos','select',opts(B,'idBarbero',nom,'(el de la cita)')],
+    ...PV.map(p=>['p'+p.idProducto,`${p.nombre} · ${money(p.precioVenta)} (hay ${p.stockActual})`,'number']),
+    ['efectivo','Pago en efectivo','number'],['transferencia','Pago por transferencia','number'],['tarjeta','Pago con tarjeta','number'],['referencia','Referencia (transferencia / voucher)']];
+  const ini={idCita:pendingCita};pendingCita=null;
+  form('Nueva venta',f,ini,o=>{const prods=PV.filter(p=>+o['p'+p.idProducto]>0).map(p=>({idProducto:p.idProducto,cantidad:+o['p'+p.idProducto]}));
+    const cita=pend.find(x=>x.idCita==o.idCita);let total=(cita?cita.total:0)+prods.reduce((s,i)=>s+i.cantidad*PV.find(p=>p.idProducto==i.idProducto).precioVenta,0);
+    const pagos=['efectivo','transferencia','tarjeta'].filter(k=>+o[k]>0).map(k=>({medioPago:k,monto:+o[k],referencia:k==='efectivo'?null:o.referencia}));
+    if(!pagos.length)pagos.push({medioPago:'efectivo',monto:total});
+    return api('POST','/ventas',{idCaja:c.idCaja,idCita:o.idCita?+o.idCita:null,idBarbero:o.idBarbero?+o.idBarbero:null,productos:prods,pagos}).then(()=>toast('Venta registrada ✔'))},'Cobrar')}
+
+/* ---------- comisiones y usuarios ---------- */
+async function comisiones(){const m=$('#main'),d=today().slice(0,8)+'01';
+  m.innerHTML=`<div class=bar><h2>Comisiones</h2><input type=date id=d1 value=${d} style="width:auto"><input type=date id=d2 value=${today()} style="width:auto"><button id=go>Calcular</button></div><div class=card id=res>Elige el periodo y pulsa Calcular.</div>`;
+  $('#go').onclick=()=>run(async()=>{const r=await api('GET',`/comisiones?desde=${$('#d1').value}&hasta=${$('#d2').value}`);
+    $('#res').innerHTML=`<table><thead><tr><th>Barbero</th><th>Servicios</th><th>Comisión servicios</th><th>Productos</th><th>Comisión productos</th><th>Total a pagar</th></tr></thead><tbody>${r.map(x=>`<tr><td>${esc(x.barbero)}</td><td>${money(x.total_servicios)}</td><td>${money(x.comision_servicios)}</td><td>${money(x.total_productos)}</td><td>${money(x.comision_productos)}</td><td><b>${money(x.comision_total)}</b></td></tr>`).join('')}</tbody></table>`})}
+async function usuarios(){const m=$('#main'),[U,R]=await Promise.all([api('GET','/usuarios'),api('GET','/roles')]);
+  m.innerHTML=`<div class=bar><h2>Usuarios</h2><button id=nw>+ Nuevo usuario</button></div><div class=card><table><thead><tr><th>Usuario</th><th>Rol</th><th>Activo</th></tr></thead><tbody>${U.map(u=>`<tr><td>${esc(u.nombreUsuario)}</td><td>${esc(u.rol)}</td><td>${u.activo?'Sí':'No'}</td></tr>`).join('')}</tbody></table></div>`;
+  $('#nw').onclick=()=>form('Nuevo usuario',[['nombreUsuario','Usuario'],['contrasena','Contraseña (mínimo 6)','password'],['idRol','Rol','select',opts(R,'id_rol','nombre')]],{},o=>api('POST','/usuarios',{...o,idRol:+o.idRol}))}
+
+/* ---------- navegación y sesión ---------- */
+const MENU=[['citas','Agenda'],['caja','Caja y ventas'],['clientes','Clientes'],['barberos','Barberos'],['turnos','Horarios'],['ausencias','Licencias'],['servicios','Servicios'],['productos','Inventario'],['comisiones','Comisiones'],['usuarios','Usuarios',1]];
+function go(v){cur=v;document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+  run(()=>CRUD[v]?crud(v):({citas,caja,comisiones,usuarios})[v]())}
+function start(){$('#login').hidden=true;$('#app').hidden=false;
+  $('#nav').innerHTML=`<h1>MILAN</h1>`+MENU.filter(x=>!x[2]||user.rol==='administrador').map(x=>`<a data-v=${x[0]}>${x[1]}</a>`).join('')+`<button class="ghost out">Salir (${esc(user.nombreUsuario)})</button>`;
+  $('#nav').onclick=e=>{if(e.target.dataset.v)go(e.target.dataset.v);if(e.target.classList.contains('out'))run(async()=>{await api('POST','/auth/logout');logout()})};go(cur)}
+function logout(){token=null;user=null;sessionStorage.clear();$('#app').hidden=true;$('#login').hidden=false}
+async function entrar(){const r=await api('POST','/auth/login',{nombreUsuario:$('#lu').value,contrasena:$('#lp').value});
+  token=r.token;user=r.usuario;sessionStorage.setItem('tk',token);sessionStorage.setItem('us',JSON.stringify(user));$('#lp').value='';start()}
+$('#lb').onclick=()=>run(entrar);$('#lp').onkeydown=e=>{if(e.key==='Enter')run(entrar)};
+$('#first').onclick=()=>run(async()=>{if(!$('#lu').value||$('#lp').value.length<6)throw new Error('Escribe usuario y una contraseña de mínimo 6 caracteres arriba y vuelve a pulsar');
+  await api('POST','/auth/primer-admin',{nombreUsuario:$('#lu').value,contrasena:$('#lp').value});toast('Administrador creado');await entrar()});
+if(token&&user)start();else $('#login').hidden=false;
+</script>
+</body>
+</html>

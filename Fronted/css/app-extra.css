@@ -1,0 +1,119 @@
+/* =====================================================================
+   MILAN Barbería — estilos adicionales para las pantallas conectadas a la API
+   (formularios, notificaciones, buscador, caja). Usa las mismas variables
+   de css/styles.css para mantener el diseño.
+   ===================================================================== */
+
+.btn--sm { min-height: 40px; padding: 0 14px; font-size: 12px; }
+.btn--danger { border-color: rgba(255,101,119,.4); background: rgba(255,101,119,.08); color: var(--error); }
+.btn--danger:hover { background: rgba(255,101,119,.16); }
+.btn--success { border-color: rgba(53,201,144,.4); background: rgba(53,201,144,.1); color: var(--success); }
+.btn--success:hover { background: rgba(53,201,144,.18); }
+
+.status--error { color: var(--error); background: rgba(255,101,119,.12); }
+
+/* Selects y fechas de filtro dentro de las barras de herramientas */
+.filter-select, .inline-date input {
+  height: 48px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.025);
+  color: var(--white); padding: 0 14px; font-size: 13px; outline: 0; color-scheme: dark;
+}
+.filter-select option { background: var(--panel); }
+.inline-date { display: flex; align-items: center; gap: 8px; color: var(--subtle); font-size: 12px; font-weight: 600; }
+.simple-field input[type="date"], .simple-field input[type="time"] { color-scheme: dark; }
+.simple-field textarea {
+  width: 100%; min-height: 84px; border: 1px solid var(--border); color: var(--white); background: var(--deep);
+  border-radius: 10px; padding: 12px 14px; outline: 0; font: inherit; resize: vertical;
+}
+.simple-field textarea:focus { border-color: var(--blue-bright); }
+.simple-field.invalid input { border-color: var(--error); }
+
+/* Acciones dentro de las tablas */
+.row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.row-actions .row-action { color: var(--subtle); }
+.row-actions .row-action.danger:hover { color: var(--error); }
+.cell-sub { display: block; color: var(--subtle); font-size: 11px; margin-top: 4px; }
+.empty-row td { text-align: center; color: var(--subtle); height: 120px; }
+.empty-state { padding: 32px 24px; text-align: center; color: var(--subtle); font-size: 13px; }
+.loading-row td { text-align: center; color: var(--subtle); }
+
+/* Modal de formularios */
+.modal--form { width: min(100%, 620px); max-height: calc(100vh - 48px); overflow-y: auto; text-align: left; padding: 36px; }
+.modal--form h2 { margin-top: 6px; }
+.form-body { display: grid; gap: 18px; margin-top: 24px; }
+.modal .form-body .simple-field { margin: 0; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 28px; flex-wrap: wrap; }
+.modal--form .form-error { margin-top: 16px; }
+.check-field { display: flex; align-items: center; gap: 10px; color: var(--cold); font-size: 13px; }
+.check-field input, .mini-table input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 18px; padding: 0; accent-color: var(--blue-bright); }
+.modal--form.modal--wide { width: min(100%, 820px); }
+.form-section-title { color: var(--white); font: 600 14px/1.3 "Montserrat", sans-serif; margin: 8px 0 -4px; }
+.mini-table { width: 100%; min-width: 0; }
+.mini-table th { padding: 10px 12px; }
+.mini-table td { height: 48px; padding: 8px 12px; font-size: 12px; }
+.mini-table input, .mini-table select {
+  width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; background: var(--deep);
+  color: var(--white); padding: 0 8px; color-scheme: dark;
+}
+.detail-list { display: grid; gap: 10px; }
+.detail-list div { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px; font-size: 13px; color: var(--cold); }
+.detail-list strong { color: var(--white); font-weight: 600; text-align: right; }
+
+/* Chips para elegir varios servicios */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; font-size: 12px; color: var(--cold);
+  background: var(--deep); cursor: pointer; transition: .2s;
+}
+.chip:hover { border-color: var(--muted); }
+.chip.selected { border-color: var(--blue-bright); background: rgba(31,20,193,.2); color: var(--white); }
+
+/* Notificación tipo "toast" */
+.toast {
+  position: fixed; right: 24px; bottom: 24px; z-index: 80; max-width: min(420px, calc(100vw - 48px));
+  background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--success);
+  color: var(--white); padding: 14px 18px; border-radius: 12px; font-size: 13px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.toast.error { border-left-color: var(--error); }
+
+/* Buscador global */
+.global-search { position: relative; }
+.search-results, .notification-panel {
+  position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 40; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.5); overflow: hidden;
+  max-height: 420px; overflow-y: auto;
+}
+.search-results h4 { margin: 0; padding: 12px 16px 6px; color: var(--muted); font-size: 10px; letter-spacing: .12em; }
+.search-results button, .notification-panel button {
+  width: 100%; border: 0; background: transparent; text-align: left; padding: 10px 16px; color: var(--cold);
+  font-size: 13px; display: flex; justify-content: space-between; gap: 12px;
+}
+.search-results button:hover, .notification-panel button:hover { background: rgba(255,255,255,.04); color: var(--white); }
+.search-results small, .notification-panel small { color: var(--subtle); }
+.topbar-actions { position: relative; }
+.notification-panel { left: auto; right: 0; width: 320px; }
+.notification-panel h4 { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--white); font-size: 13px; }
+
+/* Agenda */
+.calendar-event.green { border-color: var(--success); background: rgba(53,201,144,.12); }
+.calendar-event.red { border-color: var(--error); background: rgba(255,101,119,.1); opacity: .7; }
+.barber-head span.off { color: var(--subtle); }
+.barber-head span.away { color: var(--warning); }
+.calendar-break {
+  position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.03) 0 6px, transparent 6px 12px);
+  border-block: 1px dashed var(--border); color: var(--muted); font-size: 9px; display: grid; place-items: center; letter-spacing: .1em;
+}
+.calendar-off { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 11px; background: rgba(4,8,15,.35); }
+.hour-col span { display: block; }
+
+/* Caja */
+.pay-row { display: grid; grid-template-columns: 1fr 1fr 1fr 40px; gap: 8px; align-items: end; }
+.totals { display: flex; justify-content: space-between; color: var(--cold); font-size: 13px; padding: 12px 0 0; border-top: 1px solid var(--border); }
+.totals strong { color: var(--white); font-size: 18px; font-family: "Montserrat", sans-serif; }
+
+@media (max-width: 560px) {
+  .form-grid, .pay-row { grid-template-columns: 1fr; }
+  .modal--form { padding: 28px 20px; }
+  .notification-panel { width: calc(100vw - 48px); }
+}
