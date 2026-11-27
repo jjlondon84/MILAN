@@ -68,7 +68,7 @@
       </div>
     </div>
 
-    <form class="login-card" id="login-form" novalidate>
+    <form class="login-card" id="login-form" novalidate autocomplete="off">
       
       <div class="login-heading">
         <span class="eyebrow">BIENVENIDO</span>
@@ -81,7 +81,7 @@
         <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#i-user"/></svg>
         <span>
           <b>Usuario</b>
-          <input name="usuario" placeholder="Ingresa tu usuario" autocomplete="username">
+          <input name="usuario" id="login-usuario" placeholder="Ingresa tu usuario" autocomplete="off" autocapitalize="off" spellcheck="false" readonly data-sin-autollenado>
         </span>
       </label>
 
@@ -90,7 +90,7 @@
         <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#i-lock"/></svg>
         <span>
           <b>Contraseña</b>
-          <input name="password" id="password" type="password" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+          <input name="password" id="password" type="password" placeholder="Ingresa tu contraseña" autocomplete="new-password" readonly data-sin-autollenado>
         </span>
         <button class="icon-button" type="button" id="toggle-password" aria-label="Mostrar contraseña">
           <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#i-eye"/></svg>

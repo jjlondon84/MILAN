@@ -4,6 +4,25 @@ const $ = (id) => document.getElementById(id);
 const form = $("login-form");
 const password = $("password");
 const error = $("form-error");
+
+/* Que el navegador no deje escrito el usuario ni la contraseña de quien entró antes.
+   Los campos arrancan en solo lectura (el navegador no los autollena) y se habilitan al tocarlos. */
+function limpiarLogin() {
+  // Solo se limpian los campos que la persona aún no ha tocado (siguen en solo lectura):
+  // así nunca se borra lo que alguien está escribiendo.
+  form.querySelectorAll("[data-sin-autollenado][readonly]").forEach((el) => (el.value = ""));
+}
+form.querySelectorAll("[data-sin-autollenado]").forEach((el) => {
+  const habilitar = () => el.removeAttribute("readonly");
+  el.addEventListener("focus", habilitar);
+  el.addEventListener("pointerdown", habilitar);
+});
+limpiarLogin();
+[150, 600, 1500].forEach((ms) => setTimeout(limpiarLogin, ms));
+window.addEventListener("pageshow", () => {
+  form.querySelectorAll("[data-sin-autollenado]").forEach((el) => el.setAttribute("readonly", ""));
+  limpiarLogin();
+});
 const fields = form.querySelectorAll(".field");
 
 // Si ya hay una sesión válida, entra directo al panel
@@ -41,6 +60,7 @@ form.addEventListener("submit", async (e) => {
   try {
     const r = await api("/auth/login", { method: "POST", body: { nombreUsuario: usuario, contrasena: clave } });
     Sesion.guardar({ token: r.token, usuario: r.usuario, expira: r.expira }, $("remember").checked);
+    form.querySelectorAll("[data-sin-autollenado]").forEach((el) => (el.value = ""));
     window.location.href = "app.html";
   } catch (err) {
     mostrarError(err.message);

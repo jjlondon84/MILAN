@@ -150,6 +150,7 @@ Todos los errores llegan como `{"error": "mensaje claro"}` con su código HTTP (
 - **Caja y ventas:** `POST /caja/abrir`, `GET /caja/estado`, `GET /caja/actual`, `GET /caja`, `POST /caja/{id}/cerrar`,
   `GET /caja/{id}/arqueo`, `POST /ventas`, `GET /ventas?idCaja=`, `GET /ventas/{id}`, `PATCH /ventas/{id}/anular`
 - **Comisiones:** `GET /comisiones?desde=&hasta=`, `GET /comisiones/resumen?desde=&hasta=`
+- **Ingresos (admin):** `GET /ingresos?desde=&hasta=&agrupar=dia|semana|mes` — totales, comparación con el periodo anterior, serie para la gráfica, medios de pago, ingresos por barbero y lo más vendido
 
 Estados de una cita: `programada` (pendiente) → `confirmada` → `en_atencion` → `terminada` (el barbero pulsó «Terminé») → `completada` (al cobrar) · `cancelada` · `no_asistio`.
 

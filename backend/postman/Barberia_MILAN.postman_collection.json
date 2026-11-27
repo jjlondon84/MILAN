@@ -1997,6 +1997,135 @@
           }
         }
       ]
+    },
+    {
+      "name": "12. Ingresos (admin)",
+      "item": [
+        {
+          "name": "Ingresos del mes por día",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ingresos?desde=2026-11-01&hasta=2026-11-30&agrupar=dia",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ingresos"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-11-01"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-11-30"
+                },
+                {
+                  "key": "agrupar",
+                  "value": "dia"
+                }
+              ]
+            },
+            "description": "Totales del mes, comparación con el mes anterior y un tramo por día."
+          }
+        },
+        {
+          "name": "Ingresos de la semana",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ingresos?desde=2026-11-23&hasta=2026-11-29&agrupar=dia",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ingresos"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-11-23"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-11-29"
+                },
+                {
+                  "key": "agrupar",
+                  "value": "dia"
+                }
+              ]
+            },
+            "description": "Lunes a domingo."
+          }
+        },
+        {
+          "name": "Ingresos del año por mes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ingresos?desde=2026-01-01&hasta=2026-12-31&agrupar=mes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ingresos"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-12-31"
+                },
+                {
+                  "key": "agrupar",
+                  "value": "mes"
+                }
+              ]
+            },
+            "description": "Un tramo por mes."
+          }
+        },
+        {
+          "name": "Ingresos por semana (rango libre)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ingresos?desde=2026-09-01&hasta=2026-11-30&agrupar=semana",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ingresos"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-09-01"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-11-30"
+                },
+                {
+                  "key": "agrupar",
+                  "value": "semana"
+                }
+              ]
+            },
+            "description": "Si omites agrupar se elige solo: hasta 31 días por día, hasta 120 por semana y más por mes."
+          }
+        }
+      ]
     }
   ]
 }

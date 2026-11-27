@@ -16,13 +16,14 @@ const screenMeta = {
   clientes:   { eyebrow: "RELACIONES",       title: "Clientes",             subtitle: "Historial, preferencias y datos de contacto." },
   inventario: { eyebrow: "EXISTENCIAS",      title: "Inventario",           subtitle: "Controla productos e insumos antes de que se agoten." },
   caja:       { eyebrow: "CAJA Y VENTAS",    title: "Caja",                 subtitle: "Abre la jornada, cobra servicios y productos y haz el arqueo." },
+  ingresos:   { eyebrow: "REPORTES",         title: "Ingresos",             subtitle: "Cuánto entró por día, semana, mes o año, y de dónde vino." },
   midia:      { eyebrow: "MI DÍA",           title: "Buenos días",          subtitle: "Tus citas de hoy, lo que llevas generado y tus propinas." },
   mihorario:  { eyebrow: "MI TURNO",         title: "Mi horario",           subtitle: "Tu horario semanal, descansos y días libres." },
 };
 
 /* Lo que ve cada rol. El backend también lo controla (403 si un barbero entra a una sección del administrador). */
 const MENU_POR_ROL = {
-  administrador: ["dashboard", "agenda", "personal", "servicios", "comisiones", "clientes", "inventario", "caja"],
+  administrador: ["dashboard", "ingresos", "agenda", "personal", "servicios", "comisiones", "clientes", "inventario", "caja"],
   barbero: ["midia", "agenda", "mihorario", "comisiones", "clientes"],
 };
 const TEXTOS_BARBERO = {
@@ -224,6 +225,7 @@ const cargadores = {
   clientes: cargarClientes,
   inventario: cargarInventario,
   caja: cargarCaja,
+  ingresos: cargarIngresos,
   midia: cargarMiDia,
   mihorario: cargarMiHorario,
 };
@@ -512,6 +514,10 @@ async function cargarDashboard() {
     tarjeta("warning", "warning", "STOCK BAJO", d.stockBajo, d.stockBajo ? "Requieren atención" : "Todo en orden") +
     tarjeta("personal", "", "BARBEROS EN TURNO", `${d.barberosEnTurno} / ${d.barberosActivos}`, d.barberosEnTurno ? "Capacidad disponible" : "Nadie en turno hoy");
 
+  const tarjetaIngresos = $("dash-stats").children[1];
+  tarjetaIngresos.classList.add("stat-card--link");
+  tarjetaIngresos.title = "Ver ingresos por semana y mes";
+  tarjetaIngresos.addEventListener("click", () => navigate("ingresos"));
   const lista = $("dash-appointments");
   const citas = d.citas || [];
   if (!citas.length) {
@@ -583,6 +589,275 @@ async function detalleCita(idCita) {
     </div>`,
     actions: acciones,
   });
+}
+
+/* ===================================================================== INGRESOS (administrador) */
+const ing = { periodo: "mes", ref: new Date(), ultimo: null, tabla: false };
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const DIAS_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const COLOR_BARRA = "#5b50ff";
+
+const dineroCorto = (v) => {
+  const n = Number(v || 0);
+  if (n >= 1e6) return `$ ${(n / 1e6).toLocaleString("es-CO", { maximumFractionDigits: 1 })} M`;
+  if (n >= 1e3) return `$ ${Math.round(n / 1e3).toLocaleString("es-CO")} mil`;
+  return fmt.dinero(n);
+};
+const sumarDias = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+
+function rangoIngresos() {
+  const r = ing.ref;
+  switch (ing.periodo) {
+    case "dia":
+      return { desde: r, hasta: r, agrupar: "dia", label: fmt.fechaLarga(r) };
+    case "semana": {
+      const l = lunesDe(r);
+      const d = sumarDias(l, 6);
+      return { desde: l, hasta: d, agrupar: "dia", label: `${l.getDate()} ${MESES_CORTOS[l.getMonth()]} – ${d.getDate()} ${MESES_CORTOS[d.getMonth()]} ${d.getFullYear()}` };
+    }
+    case "anio":
+      return { desde: new Date(r.getFullYear(), 0, 1), hasta: new Date(r.getFullYear(), 11, 31), agrupar: "mes", label: `Año ${r.getFullYear()}` };
+    case "rango": {
+      const desde = $("ing-desde").value ? fmt.aFecha($("ing-desde").value) : new Date(r.getFullYear(), r.getMonth(), 1);
+      const hasta = $("ing-hasta").value ? fmt.aFecha($("ing-hasta").value) : r;
+      return { desde, hasta, agrupar: $("ing-agrupar").value || "", label: `${fmt.fechaCorta(desde)} – ${fmt.fechaCorta(hasta)}` };
+    }
+    default: {
+      const t = r.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+      return { desde: new Date(r.getFullYear(), r.getMonth(), 1), hasta: new Date(r.getFullYear(), r.getMonth() + 1, 0), agrupar: "dia", label: t.charAt(0).toUpperCase() + t.slice(1) };
+    }
+  }
+}
+
+function moverIngresos(signo) {
+  const r = ing.ref;
+  if (ing.periodo === "dia") ing.ref = sumarDias(r, signo);
+  else if (ing.periodo === "semana") ing.ref = sumarDias(r, 7 * signo);
+  else if (ing.periodo === "anio") ing.ref = new Date(r.getFullYear() + signo, r.getMonth(), 1);
+  else ing.ref = new Date(r.getFullYear(), r.getMonth() + signo, 1);
+  cargarIngresos().catch((e) => toast(e.message, "error"));
+}
+
+$("ing-periodos").querySelectorAll("[data-periodo]").forEach((b) =>
+  b.addEventListener("click", () => {
+    ing.periodo = b.dataset.periodo;
+    $("ing-periodos").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+    if (ing.periodo === "rango" && !$("ing-desde").value) {
+      const hoy = new Date();
+      $("ing-desde").value = fmt.iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+      $("ing-hasta").value = fmt.iso(hoy);
+    }
+    cargarIngresos().catch((e) => toast(e.message, "error"));
+  }),
+);
+$("ing-prev").addEventListener("click", () => moverIngresos(-1));
+$("ing-next").addEventListener("click", () => moverIngresos(1));
+$("ing-hoy").addEventListener("click", () => {
+  ing.ref = new Date();
+  if (ing.periodo === "rango") $("ing-periodos").querySelector('[data-periodo="mes"]').click();
+  else cargarIngresos().catch((e) => toast(e.message, "error"));
+});
+$("ing-aplicar").addEventListener("click", () => cargarIngresos().catch((e) => toast(e.message, "error")));
+$("ing-ver-tabla").addEventListener("click", () => {
+  ing.tabla = !ing.tabla;
+  $("ing-tabla-wrap").hidden = !ing.tabla;
+  $("ing-chart").hidden = ing.tabla;
+  $("ing-ver-tabla").textContent = ing.tabla ? "Ver como gráfica" : "Ver como tabla";
+  if (!ing.tabla && ing.ultimo) dibujarIngresos();
+});
+$("ing-exportar").addEventListener("click", exportarIngresos);
+let ingResize;
+window.addEventListener("resize", () => {
+  clearTimeout(ingResize);
+  ingResize = setTimeout(() => estado.pantalla === "ingresos" && ing.ultimo && !ing.tabla && dibujarIngresos(), 150);
+});
+
+function etiquetaTramo(t, agrupar, larga = false) {
+  const d = fmt.aFecha(t.inicio);
+  if (agrupar === "mes") {
+    const m = d.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+    return larga ? m.charAt(0).toUpperCase() + m.slice(1) : MESES_CORTOS[d.getMonth()];
+  }
+  if (agrupar === "semana") {
+    const f = fmt.aFecha(t.fin);
+    return larga ? `Semana del ${d.getDate()} ${MESES_CORTOS[d.getMonth()]} al ${f.getDate()} ${MESES_CORTOS[f.getMonth()]}` : `${d.getDate()} ${MESES_CORTOS[d.getMonth()]}`;
+  }
+  return larga ? fmt.fechaLarga(d) : ing.periodo === "semana" || ing.periodo === "dia" ? `${DIAS_CORTOS[d.getDay()]} ${d.getDate()}` : String(d.getDate());
+}
+
+async function cargarIngresos() {
+  const r = rangoIngresos();
+  $("ing-rango").hidden = ing.periodo !== "rango";
+  $("ing-nav").hidden = ing.periodo === "rango";
+  $("ing-label").textContent = r.label;
+  if (r.hasta < r.desde) throw new Error("La fecha final no puede ser anterior a la inicial");
+  const q = { desde: fmt.iso(r.desde), hasta: fmt.iso(r.hasta) };
+  if (r.agrupar) q.agrupar = r.agrupar;
+  const pedidos = [api("/ingresos", { query: q })];
+  // En "Día" la gráfica muestra la semana de ese día, para tener contexto
+  if (ing.periodo === "dia") {
+    const l = lunesDe(r.desde);
+    pedidos.push(api("/ingresos", { query: { desde: fmt.iso(l), hasta: fmt.iso(sumarDias(l, 6)), agrupar: "dia" } }));
+  }
+  const [d, semana] = await Promise.all(pedidos);
+  ing.ultimo = d;
+  ing.semanaDelDia = semana || null;
+  ing.label = r.label;
+  pintarIngresos();
+}
+
+function pintarIngresos() {
+  const d = ing.ultimo;
+  const t = d.totales;
+  const v = d.variacionPorcentaje;
+  const nombrePrev = { dia: "ayer", semana: "la semana anterior", mes: "el mes anterior", anio: "el año anterior", rango: "el periodo anterior" }[ing.periodo];
+  const pieVar = v === null || v === undefined
+    ? `Sin ventas en ${nombrePrev} para comparar`
+    : `${v >= 0 ? "▲ +" : "▼ "}${Number(v).toLocaleString("es-CO")}% vs. ${nombrePrev} (${fmt.dinero(d.anterior.ingresos)})`;
+  const tarjeta = (iconId, cls, titulo, valor, pie) =>
+    `<article class="stat-card"><div class="stat-icon ${cls}">${icon(iconId)}</div><div><span>${titulo}</span><strong>${valor}</strong><small>${h(pie)}</small></div></article>`;
+  $("ing-stats").innerHTML =
+    tarjeta("trend", "success", "INGRESOS", fmt.dinero(t.ingresos), pieVar) +
+    tarjeta("calendar", "", "VENTAS", t.ventas, `Ticket promedio ${fmt.dinero(t.ticketPromedio)}`) +
+    tarjeta("money", "", "PROPINAS (BARBEROS)", fmt.dinero(t.propinasTotal), `Caja ${fmt.dinero(t.propinasCaja)} · En mano ${fmt.dinero(t.propinasEnMano)}`) +
+    tarjeta("money", "success", "TOTAL COBRADO EN CAJA", fmt.dinero(t.cobrado), "Ingresos + propinas cobradas en caja");
+
+  const agr = ing.periodo === "dia" ? "dia" : d.agrupar;
+  $("ing-chart-eyebrow").textContent = ing.periodo === "dia" ? "SEMANA DE ESE DÍA" : ing.label.toUpperCase();
+  $("ing-chart-title").textContent = `Ingresos por ${{ dia: "día", semana: "semana", mes: "mes" }[agr]}`;
+  const serie = (ing.periodo === "dia" && ing.semanaDelDia ? ing.semanaDelDia : d).serie;
+  $("ing-tabla").innerHTML = serie
+    .map((x) => `<tr><td>${h(etiquetaTramo(x, agr, true))}</td><td>${x.ventas}</td><td>${fmt.dinero(x.servicios)}</td><td>${fmt.dinero(x.productos)}</td><td><strong>${fmt.dinero(x.ingresos)}</strong></td><td>${fmt.dinero(x.propinas)}</td></tr>`)
+    .join("");
+  if (!ing.tabla) dibujarIngresos();
+
+  // Servicios y productos
+  const pct = (a, b) => (Number(b) > 0 ? Math.round((Number(a) / Number(b)) * 100) : 0);
+  const barra = (label, valor, total, sub = "") =>
+    `<div class="hbar"><div class="hbar-top"><span>${h(label)}</span><strong>${fmt.dinero(valor)} <small>${pct(valor, total)}%</small></strong></div><div class="hbar-track"><i style="width:${pct(valor, total)}%"></i></div>${sub ? `<small class="hbar-sub">${h(sub)}</small>` : ""}</div>`;
+  const vacio = (txt) => `<div class="empty-state">${h(txt)}</div>`;
+  $("ing-composicion").innerHTML = Number(t.ingresos) > 0
+    ? barra("Servicios", t.servicios, t.ingresos) + barra("Productos", t.productos, t.ingresos)
+    : vacio("No hubo ventas en este periodo");
+
+  const medios = d.mediosPago || [];
+  const totalMedios = medios.reduce((s, m) => s + Number(m.total), 0);
+  const NOMBRE_MEDIO = { efectivo: "Efectivo", tarjeta: "Tarjeta", transferencia: "Transferencia" };
+  $("ing-medios").innerHTML = medios.length
+    ? medios.map((m) => barra(NOMBRE_MEDIO[m.medio] || m.medio, m.total, totalMedios, `${m.ventas} venta(s) · incluye propinas cobradas en caja`)).join("")
+    : vacio("Sin pagos en este periodo");
+
+  const barberos = d.porBarbero || [];
+  $("ing-barberos").innerHTML = barberos.length
+    ? barberos.map((b) => barra(b.barbero, b.ingresos, t.ingresos, `${b.ventas} venta(s)${Number(b.propinas) > 0 ? ` · propinas en caja ${fmt.dinero(b.propinas)}` : ""}`)).join("")
+    : vacio("Sin ventas en este periodo");
+
+  const lista = (titulo, items) =>
+    `<p class="form-section-title">${titulo}</p>` +
+    (items.length
+      ? `<ol class="ing-top">${items.map((x) => `<li><span>${h(x.nombre)} <small>× ${Number(x.cantidad)}</small></span><strong>${fmt.dinero(x.total)}</strong></li>`).join("")}</ol>`
+      : '<p class="cell-sub">Nada vendido en este periodo</p>');
+  $("ing-top").innerHTML = lista("Servicios", d.topServicios || []) + lista("Productos", d.topProductos || []);
+}
+
+/** Gráfica de columnas (una sola serie): eje Y con valores redondos, tooltip al pasar el mouse o tocar. */
+function dibujarIngresos() {
+  const cont = $("ing-chart");
+  const d = ing.ultimo;
+  const agr = ing.periodo === "dia" ? "dia" : d.agrupar;
+  const serie = (ing.periodo === "dia" && ing.semanaDelDia ? ing.semanaDelDia : d).serie;
+  const resaltar = ing.periodo === "dia" ? fmt.iso(ing.ref) : null;
+  const W = Math.max(cont.clientWidth, 280);
+  const H = 260;
+  const m = { top: 16, right: 12, bottom: 30, left: 64 };
+  const iw = W - m.left - m.right;
+  const ih = H - m.top - m.bottom;
+  const max = Math.max(...serie.map((x) => Number(x.ingresos)), 0);
+  // Escala con valores "redondos"
+  const paso = (() => {
+    if (max <= 0) return 10000;
+    const bruto = max / 4;
+    const p = Math.pow(10, Math.floor(Math.log10(bruto)));
+    return [1, 2, 2.5, 5, 10].map((k) => k * p).find((k) => k >= bruto);
+  })();
+  const tope = paso * Math.max(1, Math.ceil(max / paso));
+  const y = (val) => m.top + ih - (Number(val) / tope) * ih;
+  const banda = iw / serie.length;
+  const ancho = Math.max(2, Math.min(24, banda - 2));
+  const cadaCuanto = Math.ceil(serie.length / Math.max(1, Math.floor(iw / 44)));
+  const hoy = fmt.iso(new Date());
+
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfica de ingresos">`;
+  for (let v = 0; v <= tope + 1; v += paso) {
+    const yy = Math.round(y(v)) + 0.5;
+    svg += `<line x1="${m.left}" x2="${W - m.right}" y1="${yy}" y2="${yy}" class="ing-grid-line"/><text x="${m.left - 8}" y="${yy + 4}" text-anchor="end" class="ing-axis">${dineroCorto(v)}</text>`;
+  }
+  serie.forEach((x, i) => {
+    const cx = m.left + banda * i + banda / 2;
+    const val = Number(x.ingresos);
+    const futuro = x.inicio > hoy;
+    const tenue = (resaltar && x.inicio !== resaltar) || futuro;
+    if (val > 0) {
+      const top = y(val);
+      const alto = m.top + ih - top;
+      const r = Math.min(4, alto, ancho / 2);
+      const x0 = cx - ancho / 2;
+      const x1 = cx + ancho / 2;
+      const base = m.top + ih;
+      svg += `<path d="M${x0},${base} V${top + r} Q${x0},${top} ${x0 + r},${top} H${x1 - r} Q${x1},${top} ${x1},${top + r} V${base} Z" fill="${COLOR_BARRA}" opacity="${tenue ? 0.35 : 1}"/>`;
+    }
+    if (i % cadaCuanto === 0 || serie.length <= 12) {
+      svg += `<text x="${cx}" y="${H - 10}" text-anchor="middle" class="ing-axis${x.inicio === resaltar ? " fuerte" : ""}">${h(etiquetaTramo(x, agr))}</text>`;
+    }
+    svg += `<rect class="ing-hit" data-i="${i}" x="${m.left + banda * i}" y="${m.top}" width="${banda}" height="${ih}" fill="transparent"/>`;
+  });
+  svg += `<line x1="${m.left}" x2="${W - m.right}" y1="${m.top + ih + 0.5}" y2="${m.top + ih + 0.5}" class="ing-base"/></svg>`;
+  cont.innerHTML = svg + '<div class="ing-tooltip" hidden></div>';
+
+  const tip = cont.querySelector(".ing-tooltip");
+  const mostrar = (el) => {
+    const x = serie[Number(el.dataset.i)];
+    cont.querySelectorAll(".ing-hit").forEach((r) => r.classList.toggle("activa", r === el));
+    tip.innerHTML = `<strong>${h(etiquetaTramo(x, agr, true))}</strong>
+      <div><span>Ingresos</span><b>${fmt.dinero(x.ingresos)}</b></div>
+      <div><span>Servicios</span><b>${fmt.dinero(x.servicios)}</b></div>
+      <div><span>Productos</span><b>${fmt.dinero(x.productos)}</b></div>
+      <div><span>Ventas</span><b>${x.ventas}</b></div>
+      ${Number(x.propinas) > 0 ? `<div><span>Propinas (caja)</span><b>${fmt.dinero(x.propinas)}</b></div>` : ""}`;
+    tip.hidden = false;
+    const bx = Number(el.getAttribute("x")) + banda / 2;
+    const izq = Math.min(Math.max(bx - tip.offsetWidth / 2, 0), W - tip.offsetWidth);
+    tip.style.left = `${izq}px`;
+    tip.style.top = `${Math.max(y(x.ingresos) - tip.offsetHeight - 10, 0)}px`;
+  };
+  cont.querySelectorAll(".ing-hit").forEach((el) => {
+    el.addEventListener("mouseenter", () => mostrar(el));
+    el.addEventListener("click", () => mostrar(el));
+  });
+  cont.querySelector("svg").addEventListener("mouseleave", () => {
+    tip.hidden = true;
+    cont.querySelectorAll(".ing-hit").forEach((r) => r.classList.remove("activa"));
+  });
+}
+
+function exportarIngresos() {
+  const d = ing.ultimo;
+  if (!d) return toast("Primero consulta un periodo", "error");
+  const agr = d.agrupar;
+  const cab = ["Periodo", "Desde", "Hasta", "Ventas", "Servicios", "Productos", "Ingresos", "Propinas (caja)"];
+  const filas = d.serie.map((x) => [etiquetaTramo(x, agr, true), x.inicio, x.fin, x.ventas, x.servicios, x.productos, x.ingresos, x.propinas]);
+  const t = d.totales;
+  const csv = [cab, ...filas, [], ["Total ingresos", t.ingresos], ["Servicios", t.servicios], ["Productos", t.productos], ["Ventas", t.ventas],
+    ["Ticket promedio", t.ticketPromedio], ["Propinas en caja", t.propinasCaja], ["Propinas en mano", t.propinasEnMano], ["Total cobrado en caja", t.cobrado],
+    ["Variación vs. periodo anterior (%)", d.variacionPorcentaje ?? ""]]
+    .map((f) => f.map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(";"))
+    .join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `ingresos_${d.desde}_${d.hasta}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /* ===================================================================== MI DÍA (barbero) */
