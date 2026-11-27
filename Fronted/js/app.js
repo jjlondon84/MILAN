@@ -297,7 +297,11 @@ $("profile").addEventListener("click", () => {
     eyebrow: "MI CUENTA",
     title: u.nombreCompleto || u.nombreUsuario || "Mi cuenta",
     subtitle: `Usuario: ${u.nombreUsuario || ""} · ${u.rol || ""}${u.email ? " · " + u.email : ""}`,
-    html: `<p class="form-section-title">Cambiar contraseña</p>
+    html: `<p class="form-section-title">Mi nombre</p>
+      <div class="form-grid">
+        ${campo("Nombre que se muestra", "nombreCompleto", { value: u.nombreCompleto || "", full: true, placeholder: "Ej: Juan Londoño" })}
+      </div>
+      <p class="form-section-title">Cambiar contraseña</p>
       <div class="form-grid">
         ${campo("Contraseña actual", "contrasenaActual", { type: "password", full: true })}
         ${campo("Nueva contraseña", "nuevaContrasena", { type: "password", placeholder: "Mínimo 6 caracteres" })}
@@ -305,6 +309,18 @@ $("profile").addEventListener("click", () => {
       </div>`,
     actions: [
       ...(esAdmin ? [{ label: "Gestionar usuarios", cls: "btn--secondary", onClick: () => gestionarUsuarios() }] : []),
+      {
+        label: "Guardar nombre",
+        cls: "btn--secondary",
+        onClick: async (v) => {
+          if (!v.nombreCompleto || v.nombreCompleto.length < 3) throw new Error("Escribe tu nombre (mínimo 3 letras)");
+          await api("/auth/perfil", { method: "PUT", body: { nombreCompleto: v.nombreCompleto } });
+          await cargarPerfil();
+          if (["dashboard", "midia"].includes(estado.pantalla)) $("page-title").textContent = saludo();
+          modal.cerrar();
+          toast("Nombre actualizado");
+        },
+      },
       {
         label: "Guardar contraseña",
         onClick: async (v) => {
@@ -389,6 +405,9 @@ async function gestionarUsuarios() {
 let busquedaTimer;
 const searchInput = $("global-search-input");
 const searchResults = $("search-results");
+[0, 300, 1200].forEach((ms) => setTimeout(() => {
+  if (document.activeElement !== searchInput) searchInput.value = "";
+}, ms));
 searchInput.addEventListener("input", () => {
   clearTimeout(busquedaTimer);
   busquedaTimer = setTimeout(buscarGlobal, 250);

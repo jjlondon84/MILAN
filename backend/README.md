@@ -135,7 +135,7 @@ Todos los errores llegan como `{"error": "mensaje claro"}` con su código HTTP (
 ## 8. Rutas de la API (`/api`)
 
 - **Autenticación (públicas):** `POST /auth/login`, `POST /auth/registro` (crear cuenta, rol barbero), `POST /auth/primer-admin`, `POST /auth/recuperar`, `POST /auth/restablecer`
-- **Sesión:** `GET /auth/me`, `PUT /auth/contrasena`, `POST /auth/logout`
+- **Sesión:** `GET /auth/me`, `PUT /auth/perfil` (cambiar mi nombre), `PUT /auth/contrasena`, `POST /auth/logout`
 - **Usuarios (admin):** `GET/POST /usuarios`, `PUT /usuarios/{id}` (incluye `idBarbero` para vincular la cuenta con su ficha; `0` desvincula), `GET /roles`
 - **Mi día (barbero):** `GET /mi-panel`
 - **Dashboard:** `GET /dashboard?fecha=`, `GET /buscar?q=`

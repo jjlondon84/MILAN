@@ -112,6 +112,15 @@ public class AutenticacionControlador {
         return Map.of("mensaje", "Contraseña actualizada. Ya puedes iniciar sesión");
     }
 
+    public record PerfilRequest(@NotBlank(message = "Escribe tu nombre") @Size(min = 3, max = 100, message = "El nombre debe tener entre 3 y 100 caracteres") String nombreCompleto) {}
+
+    @Operation(summary = "Cambiar mi nombre visible")
+    @PutMapping("/perfil")
+    public AutenticacionServicio.UsuarioResponse actualizarPerfil(@Parameter(hidden = true) @RequestAttribute("sesion") AutenticacionServicio.Sesion sesion,
+                                                                  @Valid @RequestBody PerfilRequest r) {
+        return auth.actualizarNombre(sesion.idUsuario(), r.nombreCompleto());
+    }
+
     @Operation(summary = "Cambiar mi contraseña")
     @PutMapping("/contrasena")
     public Map<String, String> cambiarContrasena(@Parameter(hidden = true) @RequestAttribute("sesion") AutenticacionServicio.Sesion sesion,

@@ -255,6 +255,12 @@ public class AutenticacionServicio {
     }
 
     @Transactional
+    public UsuarioResponse actualizarNombre(Integer idUsuario, String nombreCompleto) {
+        Usuario u = buscarUsuario(idUsuario);
+        u.setNombreCompleto(nombreCompleto.trim().replaceAll("\\s+", " "));
+        return aRespuesta(usuarioRepo.save(u));
+    }
+
     public void cambiarContrasena(Integer idUsuario, String actual, String nueva) {
         Usuario u = buscarUsuario(idUsuario);
         if (!passwords.coincide(actual, u.getContrasenaHash())) {
