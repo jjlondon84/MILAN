@@ -96,10 +96,10 @@ CREATE TABLE recuperacion_contrasena (
 CREATE TABLE barbero (
   id_barbero     INT UNSIGNED NOT NULL AUTO_INCREMENT,
   id_usuario     INT UNSIGNED NULL COMMENT 'Solo si el barbero tiene acceso al sistema',
-  documento      VARCHAR(20)  NOT NULL,
+  documento      VARCHAR(20)  NULL COMMENT 'Lo completa el administrador si la ficha se creó desde Crear cuenta',
   nombres        VARCHAR(60)  NOT NULL,
   apellidos      VARCHAR(60)  NOT NULL,
-  telefono       VARCHAR(20)  NOT NULL,
+  telefono       VARCHAR(20)  NULL,
   fecha_ingreso  DATE         NOT NULL,
   estado         ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
   PRIMARY KEY (id_barbero),
@@ -184,7 +184,8 @@ CREATE TABLE servicio (
 --    Reprogramar = UPDATE de fecha_hora_inicio / fecha_hora_fin
 --    Cancelar   = UPDATE estado = 'cancelada'
 --    Flujo de estados: programada (pendiente) -> confirmada -> en_atencion
---                      -> completada (al cobrar)   |  cancelada  |  no_asistio
+--                      -> terminada (el barbero pulsó Terminé) -> completada (al cobrar en caja)
+--                      |  cancelada  |  no_asistio
 -- =====================================================================
 
 CREATE TABLE cita (
@@ -193,8 +194,10 @@ CREATE TABLE cita (
   id_barbero         INT UNSIGNED NOT NULL,
   fecha_hora_inicio  DATETIME NOT NULL,
   fecha_hora_fin     DATETIME NOT NULL COMMENT 'Inicio + suma de la duración de los servicios',
-  estado             ENUM('programada','confirmada','en_atencion','completada','cancelada','no_asistio') NOT NULL DEFAULT 'programada',
+  estado             ENUM('programada','confirmada','en_atencion','terminada','completada','cancelada','no_asistio') NOT NULL DEFAULT 'programada',
   observaciones      VARCHAR(200) NULL,
+  fecha_hora_fin_real DATETIME NULL COMMENT 'Cuando el barbero pulsó Terminé',
+  propina            DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Propina que el cliente le dio directo al barbero (100% del barbero)',
   PRIMARY KEY (id_cita),
   KEY ix_cita_barbero_fecha (id_barbero, fecha_hora_inicio),
   KEY ix_cita_cliente (id_cliente),
@@ -281,7 +284,8 @@ CREATE TABLE venta (
   id_cliente   INT UNSIGNED NULL COMMENT 'Null si es un cliente ocasional',
   id_barbero   INT UNSIGNED NULL COMMENT 'Barbero que vendió los productos (para su comisión)',
   fecha_hora   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  total        DECIMAL(12,2) NOT NULL COMMENT 'Servicios de la cita + productos',
+  total        DECIMAL(12,2) NOT NULL COMMENT 'Servicios de la cita + productos (sin propina)',
+  propina      DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Propina cobrada en caja; es 100% del barbero. Pagos = total + propina',
   estado       ENUM('pagada','anulada') NOT NULL DEFAULT 'pagada',
   PRIMARY KEY (id_venta),
   KEY ix_venta_cita (id_cita),
@@ -291,7 +295,8 @@ CREATE TABLE venta (
   CONSTRAINT fk_venta_cita    FOREIGN KEY (id_cita)    REFERENCES cita (id_cita),
   CONSTRAINT fk_venta_cliente FOREIGN KEY (id_cliente) REFERENCES cliente (id_cliente),
   CONSTRAINT fk_venta_barbero FOREIGN KEY (id_barbero) REFERENCES barbero (id_barbero),
-  CONSTRAINT ck_venta_total   CHECK (total >= 0)
+  CONSTRAINT ck_venta_total   CHECK (total >= 0),
+  CONSTRAINT ck_venta_propina CHECK (propina >= 0)
 ) ENGINE=InnoDB;
 
 -- Productos vendidos dentro de una venta
@@ -336,10 +341,10 @@ CREATE TRIGGER trg_cita_no_solapar_insert
 BEFORE INSERT ON cita
 FOR EACH ROW
 BEGIN
-  IF NEW.estado IN ('programada','confirmada','en_atencion','completada') THEN
+  IF NEW.estado IN ('programada','confirmada','en_atencion','terminada','completada') THEN
     IF EXISTS (SELECT 1 FROM cita c
                WHERE c.id_barbero = NEW.id_barbero
-                 AND c.estado IN ('programada','confirmada','en_atencion','completada')
+                 AND c.estado IN ('programada','confirmada','en_atencion','terminada','completada')
                  AND c.fecha_hora_inicio < NEW.fecha_hora_fin
                  AND c.fecha_hora_fin    > NEW.fecha_hora_inicio) THEN
       SIGNAL SQLSTATE '45000'
@@ -353,11 +358,11 @@ CREATE TRIGGER trg_cita_no_solapar_update
 BEFORE UPDATE ON cita
 FOR EACH ROW
 BEGIN
-  IF NEW.estado IN ('programada','confirmada','en_atencion','completada') THEN
+  IF NEW.estado IN ('programada','confirmada','en_atencion','terminada','completada') THEN
     IF EXISTS (SELECT 1 FROM cita c
                WHERE c.id_barbero = NEW.id_barbero
                  AND c.id_cita <> OLD.id_cita
-                 AND c.estado IN ('programada','confirmada','en_atencion','completada')
+                 AND c.estado IN ('programada','confirmada','en_atencion','terminada','completada')
                  AND c.fecha_hora_inicio < NEW.fecha_hora_fin
                  AND c.fecha_hora_fin    > NEW.fecha_hora_inicio) THEN
       SIGNAL SQLSTATE '45000'
@@ -423,18 +428,31 @@ SELECT
   c.fecha_hora_apertura,
   c.fecha_hora_cierre,
   c.monto_apertura,
-  IFNULL(SUM(CASE WHEN p.medio_pago = 'efectivo'      THEN p.monto END), 0) AS total_efectivo,
-  IFNULL(SUM(CASE WHEN p.medio_pago = 'transferencia' THEN p.monto END), 0) AS total_transferencia,
-  IFNULL(SUM(CASE WHEN p.medio_pago = 'tarjeta'       THEN p.monto END), 0) AS total_tarjeta,
-  IFNULL(SUM(p.monto), 0) AS total_vendido,
-  c.monto_apertura + IFNULL(SUM(CASE WHEN p.medio_pago = 'efectivo' THEN p.monto END), 0) AS efectivo_esperado,
+  IFNULL(pg.efectivo, 0)                                  AS total_efectivo,
+  IFNULL(pg.transferencia, 0)                             AS total_transferencia,
+  IFNULL(pg.tarjeta, 0)                                   AS total_tarjeta,
+  IFNULL(pg.cobrado, 0) - IFNULL(vt.propinas, 0)          AS total_vendido,
+  IFNULL(vt.propinas, 0)                                  AS total_propinas,
+  IFNULL(pg.cobrado, 0)                                   AS total_cobrado,
+  c.monto_apertura + IFNULL(pg.efectivo, 0)               AS efectivo_esperado,
   c.efectivo_contado,
-  c.efectivo_contado
-    - (c.monto_apertura + IFNULL(SUM(CASE WHEN p.medio_pago = 'efectivo' THEN p.monto END), 0)) AS diferencia
+  c.efectivo_contado - (c.monto_apertura + IFNULL(pg.efectivo, 0)) AS diferencia
 FROM caja c
-LEFT JOIN venta v ON v.id_caja = c.id_caja AND v.estado = 'pagada'
-LEFT JOIN pago  p ON p.id_venta = v.id_venta
-GROUP BY c.id_caja;
+LEFT JOIN (
+    SELECT v.id_caja,
+           SUM(CASE WHEN p.medio_pago = 'efectivo'      THEN p.monto END) AS efectivo,
+           SUM(CASE WHEN p.medio_pago = 'transferencia' THEN p.monto END) AS transferencia,
+           SUM(CASE WHEN p.medio_pago = 'tarjeta'       THEN p.monto END) AS tarjeta,
+           SUM(p.monto) AS cobrado
+      FROM venta v JOIN pago p ON p.id_venta = v.id_venta
+     WHERE v.estado = 'pagada'
+     GROUP BY v.id_caja
+) pg ON pg.id_caja = c.id_caja
+LEFT JOIN (
+    SELECT id_caja, SUM(propina) AS propinas
+      FROM venta WHERE estado = 'pagada'
+     GROUP BY id_caja
+) vt ON vt.id_caja = c.id_caja;
 
 -- Ficha resumida de clientes: visitas atendidas y última visita
 CREATE VIEW v_clientes_resumen AS
@@ -476,7 +494,10 @@ BEGIN
     IFNULL(cp.total_productos, 0)                    AS total_productos,
     IFNULL(cs.total_servicios, 0) + IFNULL(cp.total_productos, 0) AS ventas_generadas,
     IFNULL(cp.comision, 0)                           AS comision_productos,
-    IFNULL(cs.comision, 0) + IFNULL(cp.comision, 0)  AS comision_total
+    IFNULL(cs.comision, 0) + IFNULL(cp.comision, 0)  AS comision_total,
+    IFNULL(pr.cantidad_propinas, 0)                  AS cantidad_propinas,
+    IFNULL(pr.propinas, 0)                           AS propinas,
+    IFNULL(cs.comision, 0) + IFNULL(cp.comision, 0) + IFNULL(pr.propinas, 0) AS total_a_pagar
   FROM barbero b
   LEFT JOIN (
       SELECT c.id_barbero,
@@ -501,7 +522,26 @@ BEGIN
          AND DATE(v.fecha_hora) BETWEEN p_desde AND p_hasta
        GROUP BY v.id_barbero
   ) cp ON cp.id_barbero = b.id_barbero
-  ORDER BY comision_total DESC;
+  LEFT JOIN (
+      -- Propinas: las que el barbero registró al terminar la cita + las cobradas en caja
+      SELECT t.id_barbero, COUNT(*) AS cantidad_propinas, SUM(t.valor) AS propinas
+        FROM (
+          SELECT c.id_barbero, c.propina AS valor
+            FROM cita c
+           WHERE c.propina > 0
+             AND c.estado IN ('terminada','completada')
+             AND DATE(c.fecha_hora_inicio) BETWEEN p_desde AND p_hasta
+          UNION ALL
+          SELECT v.id_barbero, v.propina
+            FROM venta v
+           WHERE v.propina > 0
+             AND v.estado = 'pagada'
+             AND v.id_barbero IS NOT NULL
+             AND DATE(v.fecha_hora) BETWEEN p_desde AND p_hasta
+        ) t
+       GROUP BY t.id_barbero
+  ) pr ON pr.id_barbero = b.id_barbero
+  ORDER BY total_a_pagar DESC;
 END$$
 
 DELIMITER ;

@@ -32,5 +32,8 @@ public class Venta {
 
     private BigDecimal total;
 
+    /** Propina cobrada en caja; es 100% del barbero. Los pagos suman total + propina. */
+    private BigDecimal propina = BigDecimal.ZERO;
+
     private String estado = "pagada";
 }

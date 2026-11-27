@@ -37,7 +37,8 @@ public class VentaServicio {
                                Integer idCliente,
                                Integer idBarbero,
                                List<@Valid ItemProducto> productos,
-                               @NotEmpty List<@Valid PagoRequest> pagos) {}
+                               @NotEmpty List<@Valid PagoRequest> pagos,
+                               @DecimalMin(value = "0", message = "La propina no puede ser negativa") BigDecimal propina) {}
 
     public record VentaResponse(Venta venta, List<DetalleVenta> detalles, List<Pago> pagos) {}
 
@@ -69,7 +70,7 @@ public class VentaServicio {
             if (ventaRepo.existsByIdCitaAndEstado(cita.getIdCita(), "pagada")) {
                 throw new ExcepcionNegocio("Esa cita ya fue cobrada");
             }
-            if (!List.of("programada", "confirmada", "en_atencion", "completada").contains(cita.getEstado())) {
+            if (!List.of("programada", "confirmada", "en_atencion", "terminada", "completada").contains(cita.getEstado())) {
                 throw new ExcepcionNegocio("No se puede cobrar una cita " + cita.getEstado());
             }
             for (CitaServicio cs : citaServicioRepo.findByIdCita(cita.getIdCita())) {
@@ -107,7 +108,14 @@ public class VentaServicio {
             throw new ExcepcionNegocio("La venta no tiene servicios ni productos para cobrar");
         }
 
-        // 3) Pagos: deben sumar exactamente el total
+        // 3) Propina cobrada en caja (100% del barbero): los pagos suman total + propina
+        BigDecimal propina = r.propina() != null ? r.propina() : BigDecimal.ZERO;
+        if (propina.signum() > 0 && idBarbero == null) {
+            throw new ExcepcionNegocio("Para registrar una propina indica el barbero que la recibe");
+        }
+        BigDecimal aCobrar = total.add(propina);
+
+        // 4) Pagos: deben sumar exactamente el total + la propina
         BigDecimal pagado = BigDecimal.ZERO;
         for (PagoRequest p : r.pagos()) {
             if (!MEDIOS.contains(p.medioPago())) {
@@ -115,17 +123,19 @@ public class VentaServicio {
             }
             pagado = pagado.add(p.monto());
         }
-        if (pagado.compareTo(total) != 0) {
-            throw new ExcepcionNegocio("La suma de los pagos (" + pagado + ") no coincide con el total (" + total + ")");
+        if (pagado.compareTo(aCobrar) != 0) {
+            throw new ExcepcionNegocio("La suma de los pagos (" + pagado + ") no coincide con lo que hay que cobrar ("
+                    + aCobrar + (propina.signum() > 0 ? " = " + total + " + propina " + propina : "") + ")");
         }
 
-        // 4) Guardar todo (si algo falla, no se guarda nada)
+        // 5) Guardar todo (si algo falla, no se guarda nada)
         Venta venta = new Venta();
         venta.setIdCaja(caja.getIdCaja());
         venta.setIdCita(cita != null ? cita.getIdCita() : null);
         venta.setIdCliente(idCliente);
         venta.setIdBarbero(idBarbero);
         venta.setTotal(total);
+        venta.setPropina(propina);
         venta = ventaRepo.save(venta);
 
         for (DetalleVenta d : detalles) {

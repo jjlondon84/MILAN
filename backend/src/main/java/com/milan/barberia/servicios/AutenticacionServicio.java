@@ -1,10 +1,13 @@
 package com.milan.barberia.servicios;
 
+import com.milan.barberia.entidades.Barbero;
+import com.milan.barberia.excepciones.ExcepcionAccesoDenegado;
 import com.milan.barberia.excepciones.ExcepcionNegocio;
 import com.milan.barberia.excepciones.ExcepcionNoAutorizado;
 import com.milan.barberia.entidades.RecuperacionContrasena;
 import com.milan.barberia.entidades.Rol;
 import com.milan.barberia.entidades.Usuario;
+import com.milan.barberia.repositorios.BarberoRepositorio;
 import com.milan.barberia.repositorios.RecuperacionContrasenaRepositorio;
 import com.milan.barberia.repositorios.RolRepositorio;
 import com.milan.barberia.repositorios.SesionRepositorio;
@@ -33,22 +36,43 @@ public class AutenticacionServicio {
     public static final String ROL_BARBERO = "barbero";
 
     /** Datos de la sesión actual que el interceptor deja en cada petición. */
-    public record Sesion(Integer idUsuario, String nombreUsuario, boolean admin) {}
+    /**
+     * Datos de la sesión actual que el interceptor deja en cada petición.
+     * idBarbero = ficha de barbero vinculada a la cuenta (null si no tiene).
+     */
+    public record Sesion(Integer idUsuario, String nombreUsuario, boolean admin, Integer idBarbero) {
+
+        /** Un barbero solo puede ver o tocar lo suyo; el administrador, todo. */
+        public boolean puedeVerBarbero(Integer otroIdBarbero) {
+            return admin || (idBarbero != null && idBarbero.equals(otroIdBarbero));
+        }
+
+        /** Para un barbero devuelve su propia ficha; si la cuenta no tiene ficha, avisa. */
+        public Integer barberoPropio() {
+            if (idBarbero == null) {
+                throw new ExcepcionAccesoDenegado("Tu cuenta no está vinculada a una ficha de barbero. Pídele al administrador que la vincule");
+            }
+            return idBarbero;
+        }
+    }
 
     public record UsuarioResponse(Integer idUsuario, String nombreUsuario, String nombreCompleto, String email,
-                                  Integer idRol, String rol, Boolean activo, LocalDateTime fechaRegistro) {}
+                                  Integer idRol, String rol, Boolean activo, LocalDateTime fechaRegistro,
+                                  Integer idBarbero) {}
 
     private final UsuarioRepositorio usuarioRepo;
     private final RolRepositorio rolRepo;
     private final SesionRepositorio sesionRepo;
     private final RecuperacionContrasenaRepositorio recuperacionRepo;
     private final ContrasenaServicio passwords;
+    private final BarberoRepositorio barberoRepo;
     private final int horasSesion;
     private final int minutosRecuperacion;
     private final boolean mostrarTokenRecuperacion;
 
     public AutenticacionServicio(UsuarioRepositorio usuarioRepo, RolRepositorio rolRepo, SesionRepositorio sesionRepo,
                        RecuperacionContrasenaRepositorio recuperacionRepo, ContrasenaServicio passwords,
+                       BarberoRepositorio barberoRepo,
                        @Value("${app.sesion.horas:12}") int horasSesion,
                        @Value("${app.recuperacion.minutos:30}") int minutosRecuperacion,
                        @Value("${app.recuperacion.mostrar-token:true}") boolean mostrarTokenRecuperacion) {
@@ -57,6 +81,7 @@ public class AutenticacionServicio {
         this.sesionRepo = sesionRepo;
         this.recuperacionRepo = recuperacionRepo;
         this.passwords = passwords;
+        this.barberoRepo = barberoRepo;
         this.horasSesion = horasSesion;
         this.minutosRecuperacion = minutosRecuperacion;
         this.mostrarTokenRecuperacion = mostrarTokenRecuperacion;
@@ -107,7 +132,8 @@ public class AutenticacionServicio {
         return sesionRepo.findByTokenHashAndFechaExpiracionAfter(UtilidadHash.sha256Hex(token), LocalDateTime.now())
                 .flatMap(s -> usuarioRepo.findById(s.getIdUsuario()))
                 .filter(u -> Boolean.TRUE.equals(u.getActivo()))
-                .map(u -> new Sesion(u.getIdUsuario(), u.getNombreUsuario(), ROL_ADMIN.equals(nombreRol(u.getIdRol()))))
+                .map(u -> new Sesion(u.getIdUsuario(), u.getNombreUsuario(), ROL_ADMIN.equals(nombreRol(u.getIdRol())),
+                        barberoRepo.findByIdUsuario(u.getIdUsuario()).map(Barbero::getIdBarbero).orElse(null)))
                 .orElse(null);
     }
 
@@ -146,8 +172,42 @@ public class AutenticacionServicio {
         }
         Rol barbero = rolRepo.findByNombre(ROL_BARBERO)
                 .orElseThrow(() -> new ExcepcionNegocio("Falta el rol 'barbero'. Ejecuta el script SQL completo"));
-        return crearUsuario(nombreUsuario, contrasena, barbero.getIdRol(),
-                nombreCompleto.trim().replaceAll("\\s+", " "), email);
+        String nombreLimpio = nombreCompleto.trim().replaceAll("\\s+", " ");
+        UsuarioResponse creado = crearUsuario(nombreUsuario, contrasena, barbero.getIdRol(), nombreLimpio, email);
+
+        // Su ficha de barbero se crea sola; el administrador solo le asigna el horario
+        String[] partes = nombreLimpio.split(" ", 2);
+        Barbero ficha = new Barbero();
+        ficha.setIdUsuario(creado.idUsuario());
+        ficha.setNombres(partes[0]);
+        ficha.setApellidos(partes.length > 1 ? partes[1] : "-");
+        ficha.setFechaIngreso(java.time.LocalDate.now());
+        ficha.setEstado("activo");
+        barberoRepo.save(ficha);
+        return aRespuesta(buscarUsuario(creado.idUsuario()));
+    }
+
+    /**
+     * El administrador vincula una cuenta con una ficha de barbero (0 = desvincular).
+     * Una cuenta solo puede tener una ficha y una ficha solo una cuenta.
+     */
+    @Transactional
+    public UsuarioResponse vincularBarbero(Integer idUsuario, Integer idBarbero) {
+        buscarUsuario(idUsuario);
+        barberoRepo.findByIdUsuario(idUsuario).ifPresent(actual -> {
+            actual.setIdUsuario(null);
+            barberoRepo.saveAndFlush(actual);
+        });
+        if (idBarbero != null && idBarbero > 0) {
+            Barbero b = barberoRepo.findById(idBarbero)
+                    .orElseThrow(() -> new ExcepcionNegocio("La ficha de barbero no existe"));
+            if (b.getIdUsuario() != null && !b.getIdUsuario().equals(idUsuario)) {
+                throw new ExcepcionNegocio("Esa ficha ya está vinculada a otra cuenta");
+            }
+            b.setIdUsuario(idUsuario);
+            barberoRepo.save(b);
+        }
+        return aRespuesta(buscarUsuario(idUsuario));
     }
 
     @Transactional
@@ -304,7 +364,9 @@ public class AutenticacionServicio {
 
     private UsuarioResponse aRespuesta(Usuario u) {
         return new UsuarioResponse(u.getIdUsuario(), u.getNombreUsuario(), u.getNombreCompleto(), u.getEmail(),
-                u.getIdRol(), nombreRol(u.getIdRol()), u.getActivo(), u.getFechaRegistro());
+                u.getIdRol(), nombreRol(u.getIdRol()), u.getActivo(), u.getFechaRegistro(),
+                u.getIdUsuario() == null ? null
+                        : barberoRepo.findByIdUsuario(u.getIdUsuario()).map(Barbero::getIdBarbero).orElse(null));
     }
 
     private String nombreRol(Integer idRol) {

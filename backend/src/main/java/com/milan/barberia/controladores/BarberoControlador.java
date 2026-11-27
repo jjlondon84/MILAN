@@ -33,13 +33,18 @@ public class BarberoControlador extends CrudBaseControlador<Barbero> {
             description = "disponibilidad: en_turno, descanso, fuera_de_turno, ausente, sin_turno o inactivo")
     @GetMapping("/resumen")
     public List<BarberoServicio.BarberoResumen> resumen(
+            @io.swagger.v3.oas.annotations.Parameter(hidden = true) @org.springframework.web.bind.annotation.RequestAttribute("sesion") com.milan.barberia.servicios.AutenticacionServicio.Sesion sesion,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
-        return barberoServicio.resumen(fecha);
+        return barberoServicio.resumen(fecha).stream()
+                .filter(b -> sesion.puedeVerBarbero(b.idBarbero()))  // un barbero solo se ve a sí mismo
+                .toList();
     }
 
     @Operation(summary = "Solo barberos activos (para agendar)")
     @GetMapping("/activos")
-    public List<Barbero> activos() {
-        return barberoRepo.findByEstadoOrderByNombres("activo");
+    public List<Barbero> activos(@io.swagger.v3.oas.annotations.Parameter(hidden = true) @org.springframework.web.bind.annotation.RequestAttribute("sesion") com.milan.barberia.servicios.AutenticacionServicio.Sesion sesion) {
+        return barberoRepo.findByEstadoOrderByNombres("activo").stream()
+                .filter(b -> sesion.puedeVerBarbero(b.getIdBarbero()))
+                .toList();
     }
 }

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -30,4 +31,10 @@ public class Cita {
     private String estado = "programada";
 
     private String observaciones;
+
+    /** Hora en que el barbero pulsó "Terminé". */
+    private LocalDateTime fechaHoraFinReal;
+
+    /** Propina que el cliente le dio directo al barbero (100% suya). */
+    private BigDecimal propina = BigDecimal.ZERO;
 }

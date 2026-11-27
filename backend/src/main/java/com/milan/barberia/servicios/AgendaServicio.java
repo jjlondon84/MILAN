@@ -3,6 +3,7 @@ package com.milan.barberia.servicios;
 import com.milan.barberia.excepciones.ExcepcionNegocio;
 import com.milan.barberia.entidades.*;
 import com.milan.barberia.repositorios.*;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +43,21 @@ public class AgendaServicio {
                                Integer idBarbero, String barbero,
                                LocalDateTime fechaHoraInicio, LocalDateTime fechaHoraFin,
                                String estado, String observaciones,
-                               List<CitaServicioInfo> servicios, BigDecimal total) {}
+                               List<CitaServicioInfo> servicios, BigDecimal total,
+                               LocalDateTime fechaHoraFinReal, BigDecimal propina, long minutosRetraso) {}
+
+    /** Al pulsar "Terminé": propina que le dieron (opcional) y hora real de fin (por defecto, ahora). */
+    public record TerminarRequest(@DecimalMin(value = "0", message = "La propina no puede ser negativa") BigDecimal propina,
+                                  LocalDateTime fechaHoraFinReal) {}
+
+    /** Una cita siguiente que se corre por el retraso. */
+    public record CitaCorrida(Integer idCita, String cliente, LocalDateTime inicioAntes, LocalDateTime inicioDespues,
+                              LocalDateTime finDespues, boolean fueraDeTurno) {}
+
+    public record TerminarResponse(CitaResponse cita, long minutosRetraso, List<CitaCorrida> citasCorridas) {}
+
+    /** Estados en los que la cita se puede dar por terminada. */
+    private static final Set<String> TERMINABLES = Set.of("programada", "confirmada", "en_atencion");
 
     private final CitaRepositorio citaRepo;
     private final CitaServicioRepositorio citaServicioRepo;
@@ -134,6 +149,106 @@ public class AgendaServicio {
     @Transactional
     public CitaResponse marcarNoAsistio(Integer idCita) {
         return cambiarEstado(idCita, PENDIENTES, "marcar como no asistió", "no_asistio");
+    }
+
+    /** Muestra qué pasaría al terminar la cita a esa hora (sin guardar nada). */
+    public TerminarResponse previsualizarTerminar(Integer idCita, LocalDateTime finReal) {
+        Cita cita = buscar(idCita);
+        exigirEstado(cita, TERMINABLES, "terminar");
+        LocalDateTime fin = horaFin(cita, finReal);
+        List<Plan> plan = planCorrimiento(cita, fin);
+        return new TerminarResponse(respuesta(cita), minutosRetraso(cita, fin), corridas(cita, plan));
+    }
+
+    /**
+     * El barbero pulsó "Terminé": la cita queda terminada (lista para cobrar en caja), se guarda la propina
+     * que le dieron y, si terminó tarde, se corren en cadena solo las citas siguientes que se cruzan.
+     */
+    @Transactional
+    public TerminarResponse terminar(Integer idCita, TerminarRequest r) {
+        Cita cita = buscar(idCita);
+        exigirEstado(cita, TERMINABLES, "terminar");
+        LocalDateTime fin = horaFin(cita, r.fechaHoraFinReal());
+        List<Plan> plan = planCorrimiento(cita, fin);
+
+        // Se corren de la última a la primera para que nunca se crucen entre ellas (lo vigila un trigger)
+        for (int i = plan.size() - 1; i >= 0; i--) {
+            Plan p = plan.get(i);
+            p.cita().setFechaHoraInicio(p.inicio());
+            p.cita().setFechaHoraFin(p.fin());
+            citaRepo.saveAndFlush(p.cita());
+        }
+        long retraso = minutosRetraso(cita, fin);
+        cita.setFechaHoraFinReal(fin);
+        cita.setFechaHoraFin(fin);
+        cita.setPropina(r.propina() != null ? r.propina() : BigDecimal.ZERO);
+        cita.setEstado("terminada");
+        citaRepo.saveAndFlush(cita);
+        return new TerminarResponse(respuesta(cita), retraso, corridas(cita, plan));
+    }
+
+    private record Plan(Cita cita, LocalDateTime inicioAntes, LocalDateTime inicio, LocalDateTime fin) {}
+
+    private LocalDateTime horaFin(Cita cita, LocalDateTime pedida) {
+        LocalDateTime fin = (pedida != null ? pedida : LocalDateTime.now()).withSecond(0).withNano(0);
+        if (!fin.isAfter(cita.getFechaHoraInicio())) {
+            throw new ExcepcionNegocio("La hora de fin debe ser después de la hora de inicio de la cita ("
+                    + cita.getFechaHoraInicio().toLocalTime() + ")");
+        }
+        if (!fin.toLocalDate().equals(cita.getFechaHoraInicio().toLocalDate())) {
+            throw new ExcepcionNegocio("La hora de fin debe ser del mismo día de la cita");
+        }
+        return fin;
+    }
+
+    /** Minutos de más respecto a la duración de sus servicios. */
+    private long minutosRetraso(Cita cita, LocalDateTime finReal) {
+        LocalDateTime previsto = cita.getFechaHoraInicio().plusMinutes(duracionMinutos(cita));
+        return Math.max(0, Duration.between(previsto, finReal).toMinutes());
+    }
+
+    private int duracionMinutos(Cita cita) {
+        List<CitaServicio> items = citaServicioRepo.findByIdCita(cita.getIdCita());
+        int total = servicioRepo.findAllById(items.stream().map(CitaServicio::getIdServicio).toList()).stream()
+                .mapToInt(Servicio::getDuracionMin).sum();
+        return total > 0 ? total : (int) Duration.between(cita.getFechaHoraInicio(), cita.getFechaHoraFin()).toMinutes();
+    }
+
+    /** Corrimiento en cadena: cada cita siguiente que choca empieza cuando termina la anterior; un hueco lo absorbe. */
+    private List<Plan> planCorrimiento(Cita cita, LocalDateTime finReal) {
+        LocalDate dia = cita.getFechaHoraInicio().toLocalDate();
+        List<Cita> siguientes = citaRepo.siguientesDelDia(cita.getIdBarbero(), cita.getIdCita(),
+                cita.getFechaHoraInicio(), dia.plusDays(1).atStartOfDay());
+        List<Plan> plan = new java.util.ArrayList<>();
+        LocalDateTime finAnterior = finReal;
+        for (Cita n : siguientes) {
+            if (!n.getFechaHoraInicio().isBefore(finAnterior)) {
+                break; // hay un hueco: el retraso ya se absorbió
+            }
+            long duracion = Duration.between(n.getFechaHoraInicio(), n.getFechaHoraFin()).toMinutes();
+            LocalDateTime nuevoFin = finAnterior.plusMinutes(duracion);
+            if (!nuevoFin.toLocalDate().equals(dia)) {
+                throw new ExcepcionNegocio("No se puede correr la cita de las " + n.getFechaHoraInicio().toLocalTime()
+                        + ": pasaría al día siguiente. Reprográmala o cancélala primero");
+            }
+            plan.add(new Plan(n, n.getFechaHoraInicio(), finAnterior, nuevoFin));
+            finAnterior = nuevoFin;
+        }
+        return plan;
+    }
+
+    private List<CitaCorrida> corridas(Cita cita, List<Plan> plan) {
+        TurnoLaboral turno = turnoRepo.findByIdBarberoAndDiaSemana(cita.getIdBarbero(),
+                cita.getFechaHoraInicio().getDayOfWeek().getValue()).orElse(null);
+        return plan.stream().map(p -> {
+            boolean fuera = turno != null && (p.fin().toLocalTime().isAfter(turno.getHoraFin())
+                    || (turno.getDescansoInicio() != null
+                        && p.inicio().toLocalTime().isBefore(turno.getDescansoFin())
+                        && p.fin().toLocalTime().isAfter(turno.getDescansoInicio())));
+            String cliente = clienteRepo.findById(p.cita().getIdCliente())
+                    .map(x -> x.getNombres() + " " + x.getApellidos()).orElse("");
+            return new CitaCorrida(p.cita().getIdCita(), cliente, p.inicioAntes(), p.inicio(), p.fin(), fuera);
+        }).toList();
     }
 
     /** Revisa si el barbero puede atender en esa hora los servicios indicados (lo usa el formulario de nueva cita). */
@@ -296,7 +411,14 @@ public class AgendaServicio {
                 .toList();
         BigDecimal total = servicios.stream().map(CitaServicioInfo::precio).reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        long retraso = 0;
+        if (c.getFechaHoraFinReal() != null) {
+            int duracion = servicios.stream().map(CitaServicioInfo::duracionMin)
+                    .filter(java.util.Objects::nonNull).mapToInt(Integer::intValue).sum();
+            retraso = Math.max(0, Duration.between(c.getFechaHoraInicio().plusMinutes(duracion), c.getFechaHoraFinReal()).toMinutes());
+        }
         return new CitaResponse(c.getIdCita(), c.getIdCliente(), cliente, c.getIdBarbero(), barbero,
-                c.getFechaHoraInicio(), c.getFechaHoraFin(), c.getEstado(), c.getObservaciones(), servicios, total);
+                c.getFechaHoraInicio(), c.getFechaHoraFin(), c.getEstado(), c.getObservaciones(), servicios, total,
+                c.getFechaHoraFinReal(), c.getPropina() != null ? c.getPropina() : BigDecimal.ZERO, retraso);
     }
 }

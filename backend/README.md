@@ -56,6 +56,15 @@ Ej.: Clientes → `ClienteControlador` → `ClienteServicio` → `ClienteReposit
 
 > ⚠️ El script empieza con `DROP DATABASE IF EXISTS barberia_milan;` — si lo vuelves a ejecutar, borra los datos.
 
+### Actualizar una base que ya existe (sin borrar datos)
+
+Si ya tenías `barberia_milan` creada antes de la división barbero/administrador, **no** vuelvas a correr el script completo.
+Abre y ejecuta **una sola vez** `backend/src/main/resources/db/migracion_2026_11_26_barbero_propinas.sql`. Agrega:
+- el estado `terminada` y las columnas `fecha_hora_fin_real` y `propina` en `cita`;
+- la columna `propina` en `venta`;
+- la vista `v_arqueo_caja` y el procedimiento `sp_comisiones` con propinas;
+- una ficha de barbero para cada cuenta con rol barbero que no tenga una.
+
 ## 2. Configurar credenciales (`backend/.env`)
 
 En la carpeta `backend` está **`env.txt`**: renómbralo a **`.env`** (en IntelliJ: clic derecho → *Refactor → Rename*;
@@ -127,25 +136,48 @@ Todos los errores llegan como `{"error": "mensaje claro"}` con su código HTTP (
 
 - **Autenticación (públicas):** `POST /auth/login`, `POST /auth/registro` (crear cuenta, rol barbero), `POST /auth/primer-admin`, `POST /auth/recuperar`, `POST /auth/restablecer`
 - **Sesión:** `GET /auth/me`, `PUT /auth/contrasena`, `POST /auth/logout`
-- **Usuarios (admin):** `GET/POST /usuarios`, `PUT /usuarios/{id}`, `GET /roles`
+- **Usuarios (admin):** `GET/POST /usuarios`, `PUT /usuarios/{id}` (incluye `idBarbero` para vincular la cuenta con su ficha; `0` desvincula), `GET /roles`
+- **Mi día (barbero):** `GET /mi-panel`
 - **Dashboard:** `GET /dashboard?fecha=`, `GET /buscar?q=`
 - **CRUD** (GET, GET /{id}, POST, PUT /{id}, DELETE /{id}): `/servicios`, `/barberos`, `/clientes`, `/productos`, `/turnos`, `/ausencias`
 - **Extras:** `/barberos/resumen`, `/barberos/activos`, `/clientes/resumen`, `/clientes/buscar?q=`, `/productos/buscar?q=`,
   `/turnos/barbero/{id}`, `/ausencias/barbero/{id}`
 - **Citas:** `GET /citas` (hoy; filtros `idBarbero`, `desde`, `hasta`), `GET /citas/{id}`, `GET /citas/cliente/{id}`,
   `GET /citas/disponibilidad`, `GET /citas/horarios-disponibles`, `POST /citas`, `PUT /citas/{id}/reprogramar`,
-  `PATCH /citas/{id}/confirmar | iniciar | cancelar | no-asistio`
+  `PATCH /citas/{id}/confirmar | iniciar | cancelar | no-asistio`,
+  `GET /citas/{id}/terminar?fechaHoraFinReal=` (vista previa), `POST /citas/{id}/terminar` `{propina, fechaHoraFinReal}`
 - **Inventario:** `POST /inventario/movimientos`, `GET /inventario/movimientos/{idProducto}`, `GET /inventario/stock-bajo`
 - **Caja y ventas:** `POST /caja/abrir`, `GET /caja/estado`, `GET /caja/actual`, `GET /caja`, `POST /caja/{id}/cerrar`,
   `GET /caja/{id}/arqueo`, `POST /ventas`, `GET /ventas?idCaja=`, `GET /ventas/{id}`, `PATCH /ventas/{id}/anular`
 - **Comisiones:** `GET /comisiones?desde=&hasta=`, `GET /comisiones/resumen?desde=&hasta=`
 
-Estados de una cita: `programada` (pendiente) → `confirmada` → `en_atencion` → `completada` (al cobrar) · `cancelada` · `no_asistio`.
+Estados de una cita: `programada` (pendiente) → `confirmada` → `en_atencion` → `terminada` (el barbero pulsó «Terminé») → `completada` (al cobrar) · `cancelada` · `no_asistio`.
+
+### Qué puede hacer cada rol
+
+| | Administrador | Barbero |
+|---|---|---|
+| Dashboard, Personal, Servicios, Inventario, Caja, Usuarios | ✅ | ❌ (403) |
+| Mi día (`/mi-panel`) | — | ✅ |
+| Agenda | Todos los barberos | Solo sus citas; puede agendarse citas a sí mismo |
+| Terminé + propina | ✅ | ✅ (sus citas) |
+| Cobrar (con propina en caja) | ✅ | ❌ |
+| Comisiones | Todos | Solo las suyas (comisión + propinas) |
+| Horario y ausencias | Ver y editar | Solo ver el suyo |
+| Clientes | Ver, crear, editar, eliminar | Ver y crear |
+
+**Propinas.** Son 100% del barbero y no cuentan como venta ni generan comisión. Se registran de dos formas:
+1. El barbero, al pulsar **Terminé**, anota la propina que le dieron en mano (`cita.propina`).
+2. Caja, al cobrar, puede sumar una propina que el cliente paga junto con el servicio (`venta.propina`); los pagos deben sumar total + propina.
+
+En `sp_comisiones` salen aparte (`propinas`) y `total_a_pagar = comision_total + propinas`. El arqueo separa `total_vendido` de `total_propinas`.
+
+**Terminé y retraso.** Si el barbero termina después de la hora programada, las citas siguientes del mismo día que se crucen se corren en cascada (solo las que se cruzan; un hueco detiene la cascada). La vista previa avisa si alguna queda fuera del turno o en el descanso.
 
 ## 9. Reglas que valida la aplicación
 
 Cliente y barbero existen · barbero activo · cita dentro de su turno y fuera de su descanso · sin licencia/día libre ·
-sin cruce con otra cita (también lo impide un trigger) · no en el pasado · hora de fin = suma de la duración de los
+sin cruce con otra cita (también lo impide un trigger) · no en el pasado · el barbero solo ve y toca sus citas · hora de fin = suma de la duración de los
 servicios · precio y comisión se congelan al agendar · los pagos suman exactamente el total · solo se cobra con caja
 abierta · stock suficiente · anular una venta devuelve el stock · una cita no se cobra dos veces.
 

@@ -26,16 +26,18 @@ public class ComisionControlador {
     @Operation(summary = "Comisión de cada barbero en un periodo", description = "Ej: /api/comisiones?desde=2026-11-01&hasta=2026-11-15")
     @GetMapping
     public List<Map<String, Object>> calcular(
+            @io.swagger.v3.oas.annotations.Parameter(hidden = true) @org.springframework.web.bind.annotation.RequestAttribute("sesion") com.milan.barberia.servicios.AutenticacionServicio.Sesion sesion,
             @Parameter(description = "Fecha inicial (aaaa-mm-dd)") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @Parameter(description = "Fecha final (aaaa-mm-dd)") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
-        return servicio.calcular(desde, hasta);
+        return servicio.calcular(desde, hasta, sesion.admin() ? null : sesion.barberoPropio());
     }
 
     @Operation(summary = "Comisiones con totales (total generado y total a liquidar)")
     @GetMapping("/resumen")
     public Map<String, Object> resumen(
+            @io.swagger.v3.oas.annotations.Parameter(hidden = true) @org.springframework.web.bind.annotation.RequestAttribute("sesion") com.milan.barberia.servicios.AutenticacionServicio.Sesion sesion,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
-        return servicio.resumen(desde, hasta);
+        return servicio.resumen(desde, hasta, sesion.admin() ? null : sesion.barberoPropio());
     }
 }

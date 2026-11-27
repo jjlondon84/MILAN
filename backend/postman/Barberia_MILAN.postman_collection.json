@@ -439,6 +439,38 @@
             },
             "description": ""
           }
+        },
+        {
+          "name": "Vincular cuenta con ficha de barbero",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "2"
+              ]
+            },
+            "description": "Une la cuenta (usuario 2) con la ficha de barbero indicada. Usa idBarbero 0 para desvincular.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idBarbero\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -484,6 +516,23 @@
               ]
             },
             "description": ""
+          }
+        },
+        {
+          "name": "Mi día (barbero)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mi-panel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mi-panel"
+              ]
+            },
+            "description": "Panel del barbero que inició sesión: citas de hoy, generado, propinas, retraso y la cita en atención. Inicia sesión con una cuenta barbero."
           }
         }
       ]
@@ -1298,6 +1347,64 @@
             },
             "description": ""
           }
+        },
+        {
+          "name": "Terminé — vista previa (no guarda)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/terminar?fechaHoraFinReal=2026-11-26T10:20:00",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "terminar"
+              ],
+              "query": [
+                {
+                  "key": "fechaHoraFinReal",
+                  "value": "2026-11-26T10:20:00"
+                }
+              ]
+            },
+            "description": "Muestra cuántos minutos de retraso lleva y qué citas siguientes se correrían si termina a esa hora."
+          }
+        },
+        {
+          "name": "Terminé — cerrar la cita con propina",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/terminar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "terminar"
+              ]
+            },
+            "description": "El barbero cierra su cita: hora real de fin (si se omite, ahora) y propina recibida en mano. Si terminó tarde, las citas siguientes que se crucen se corren en cascada. Estado → terminada (queda por cobrar en caja).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propina\": 5000,\n  \"fechaHoraFinReal\": \"2026-11-26T10:20:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -1601,10 +1708,10 @@
                 "ventas"
               ]
             },
-            "description": "Total del ejemplo: Corte clásico 38.000 + Perfilado 28.000 + Pomada 34.000 = 100.000. Los pagos deben sumar EXACTAMENTE el total; ajústalos si cambiaste precios. La referencia se guarda cifrada (AES).",
+            "description": "Total del ejemplo: Corte clásico 38.000 + Perfilado 28.000 + Pomada 34.000 = 100.000. Los pagos deben sumar EXACTAMENTE el total; ajústalos si cambiaste precios. La referencia se guarda cifrada (AES). La propina (opcional) va 100% al barbero de la cita y NO cuenta como venta ni comisión; los pagos deben sumar total + propina (aquí 100.000 + 5.000).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"idCaja\": {{idCaja}},\n  \"idCita\": {{idCita}},\n  \"productos\": [\n    {\n      \"idProducto\": {{idProducto}},\n      \"cantidad\": 1\n    }\n  ],\n  \"pagos\": [\n    {\n      \"medioPago\": \"efectivo\",\n      \"monto\": 50000\n    },\n    {\n      \"medioPago\": \"tarjeta\",\n      \"monto\": 50000,\n      \"referencia\": \"VOUCHER-123\"\n    }\n  ]\n}",
+              "raw": "{\n  \"idCaja\": {{idCaja}},\n  \"idCita\": {{idCita}},\n  \"productos\": [\n    {\n      \"idProducto\": {{idProducto}},\n      \"cantidad\": 1\n    }\n  ],\n  \"propina\": 5000,\n  \"pagos\": [\n    {\n      \"medioPago\": \"efectivo\",\n      \"monto\": 55000\n    },\n    {\n      \"medioPago\": \"tarjeta\",\n      \"monto\": 50000,\n      \"referencia\": \"VOUCHER-123\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

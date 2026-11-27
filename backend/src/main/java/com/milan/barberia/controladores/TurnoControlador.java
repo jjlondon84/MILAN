@@ -24,7 +24,11 @@ public class TurnoControlador extends CrudBaseControlador<TurnoLaboral> {
     }
 
     @GetMapping("/barbero/{idBarbero}")
-    public List<TurnoLaboral> porBarbero(@PathVariable Integer idBarbero) {
+    public List<TurnoLaboral> porBarbero(@io.swagger.v3.oas.annotations.Parameter(hidden = true) @org.springframework.web.bind.annotation.RequestAttribute("sesion") com.milan.barberia.servicios.AutenticacionServicio.Sesion sesion,
+                                   @PathVariable Integer idBarbero) {
+        if (!sesion.puedeVerBarbero(idBarbero)) {
+            throw new com.milan.barberia.excepciones.ExcepcionAccesoDenegado("Solo puedes ver tu propio horario");
+        }
         return turnoRepo.findByIdBarbero(idBarbero);
     }
 }

@@ -42,7 +42,11 @@ public class AusenciaControlador extends CrudBaseControlador<Ausencia> {
     }
 
     @GetMapping("/barbero/{idBarbero}")
-    public List<Ausencia> porBarbero(@PathVariable Integer idBarbero) {
+    public List<Ausencia> porBarbero(@io.swagger.v3.oas.annotations.Parameter(hidden = true) @org.springframework.web.bind.annotation.RequestAttribute("sesion") com.milan.barberia.servicios.AutenticacionServicio.Sesion sesion,
+                                   @PathVariable Integer idBarbero) {
+        if (!sesion.puedeVerBarbero(idBarbero)) {
+            throw new com.milan.barberia.excepciones.ExcepcionAccesoDenegado("Solo puedes ver tu propio horario");
+        }
         return ausenciaRepo.findByIdBarbero(idBarbero);
     }
 

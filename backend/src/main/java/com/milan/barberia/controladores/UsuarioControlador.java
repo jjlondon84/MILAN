@@ -31,7 +31,9 @@ public class UsuarioControlador {
                                String nombreCompleto,
                                @Email String email) {}
 
-    public record EditarUsuario(String nombreCompleto, @Email String email, Integer idRol, Boolean activo) {}
+    /** idBarbero: ficha de barbero a vincular con la cuenta (0 = quitar el vínculo; vacío = no cambiar). */
+    public record EditarUsuario(String nombreCompleto, @Email String email, Integer idRol, Boolean activo,
+                                Integer idBarbero) {}
 
     private final AutenticacionServicio auth;
     private final ReporteRepositorio reportes;
@@ -52,7 +54,7 @@ public class UsuarioControlador {
         return auth.crearUsuario(r.nombreUsuario(), r.contrasena(), r.idRol(), r.nombreCompleto(), r.email());
     }
 
-    @Operation(summary = "Editar usuario (nombre, correo, rol o activar/desactivar)")
+    @Operation(summary = "Editar usuario (nombre, correo, rol, activar/desactivar o vincular su ficha de barbero)")
     @PutMapping("/usuarios/{id}")
     public AutenticacionServicio.UsuarioResponse editar(@Parameter(hidden = true) @RequestAttribute("sesion") AutenticacionServicio.Sesion sesion,
                                               @PathVariable Integer id, @Valid @RequestBody EditarUsuario r) {
@@ -60,7 +62,8 @@ public class UsuarioControlador {
         if (id.equals(sesion.idUsuario()) && Boolean.FALSE.equals(r.activo())) {
             throw new ExcepcionAccesoDenegado("No puedes desactivar tu propio usuario");
         }
-        return auth.actualizarUsuario(id, r.nombreCompleto(), r.email(), r.idRol(), r.activo());
+        AutenticacionServicio.UsuarioResponse u = auth.actualizarUsuario(id, r.nombreCompleto(), r.email(), r.idRol(), r.activo());
+        return r.idBarbero() != null ? auth.vincularBarbero(id, r.idBarbero()) : u;
     }
 
     @Operation(summary = "Listar roles")

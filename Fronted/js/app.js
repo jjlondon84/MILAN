@@ -16,12 +16,27 @@ const screenMeta = {
   clientes:   { eyebrow: "RELACIONES",       title: "Clientes",             subtitle: "Historial, preferencias y datos de contacto." },
   inventario: { eyebrow: "EXISTENCIAS",      title: "Inventario",           subtitle: "Controla productos e insumos antes de que se agoten." },
   caja:       { eyebrow: "CAJA Y VENTAS",    title: "Caja",                 subtitle: "Abre la jornada, cobra servicios y productos y haz el arqueo." },
+  midia:      { eyebrow: "MI DÍA",           title: "Buenos días",          subtitle: "Tus citas de hoy, lo que llevas generado y tus propinas." },
+  mihorario:  { eyebrow: "MI TURNO",         title: "Mi horario",           subtitle: "Tu horario semanal, descansos y días libres." },
 };
+
+/* Lo que ve cada rol. El backend también lo controla (403 si un barbero entra a una sección del administrador). */
+const MENU_POR_ROL = {
+  administrador: ["dashboard", "agenda", "personal", "servicios", "comisiones", "clientes", "inventario", "caja"],
+  barbero: ["midia", "agenda", "mihorario", "comisiones", "clientes"],
+};
+const TEXTOS_BARBERO = {
+  agenda: { title: "Mi agenda", subtitle: "Solo tus citas. Agenda, inicia y termina tus servicios." },
+  comisiones: { eyebrow: "MI LIQUIDACIÓN", title: "Mis comisiones", subtitle: "Lo que generaste en el periodo: comisiones y propinas." },
+  clientes: { subtitle: "Consulta preferencias e historial, y registra clientes nuevos." },
+};
+const esAdmin = () => !estado.usuario || estado.usuario.rol === "administrador";
 
 const ESTADOS_CITA = {
   programada:  { label: "Pendiente",   cls: "status--warning", color: "gray" },
   confirmada:  { label: "Confirmada",  cls: "status--success", color: "blue" },
   en_atencion: { label: "En atención", cls: "status--active",  color: "purple" },
+  terminada:   { label: "Atendida · por cobrar", cls: "status--warning", color: "green" },
   completada:  { label: "Completada",  cls: "status--neutral", color: "green" },
   cancelada:   { label: "Cancelada",   cls: "status--error",   color: "red" },
   no_asistio:  { label: "No asistió",  cls: "status--error",   color: "red" },
@@ -176,8 +191,12 @@ function aplicarBusquedaTabla(seccion) {
 
 /* ===================================================================== catálogos */
 async function cargarCatalogos() {
+  const admin = esAdmin();
   const [servicios, barberos, clientes, productos] = await Promise.all([
-    api("/servicios"), api("/barberos"), api("/clientes"), api("/productos"),
+    api("/servicios"),
+    api(admin ? "/barberos" : "/barberos/activos"),
+    api("/clientes"),
+    admin ? api("/productos") : Promise.resolve([]),
   ]);
   estado.servicios = servicios;
   estado.barberos = barberos;
@@ -205,15 +224,20 @@ const cargadores = {
   clientes: cargarClientes,
   inventario: cargarInventario,
   caja: cargarCaja,
+  midia: cargarMiDia,
+  mihorario: cargarMiHorario,
 };
 
 function navigate(id) {
-  const meta = screenMeta[id];
+  if (estado.usuario && !MENU_POR_ROL[esAdmin() ? "administrador" : "barbero"].includes(id)) {
+    id = esAdmin() ? "dashboard" : "midia";
+  }
+  const meta = { ...screenMeta[id], ...(!esAdmin() && TEXTOS_BARBERO[id] ? TEXTOS_BARBERO[id] : {}) };
   estado.pantalla = id;
   document.querySelectorAll("[data-content]").forEach((s) => (s.hidden = s.dataset.content !== id));
   document.querySelectorAll(".sidebar nav button").forEach((b) => b.classList.toggle("active", b.dataset.screen === id));
   $("page-eyebrow").textContent = meta.eyebrow;
-  $("page-title").textContent = id === "dashboard" ? saludo() : meta.title;
+  $("page-title").textContent = id === "dashboard" || id === "midia" ? saludo() : meta.title;
   $("page-subtitle").textContent = meta.subtitle;
   $("today").hidden = id !== "dashboard";
   toggleMobileNav(false);
@@ -253,7 +277,17 @@ async function cargarPerfil() {
   $("profile-name").textContent = nombreVisible;
   $("profile-role").textContent = u.rol ? u.rol.charAt(0).toUpperCase() + u.rol.slice(1) : "";
   $("profile-avatar").textContent = fmt.iniciales(nombreVisible);
+  aplicarMenuPorRol();
   if (estado.pantalla === "dashboard") $("page-title").textContent = saludo();
+}
+
+function aplicarMenuPorRol() {
+  const visibles = MENU_POR_ROL[esAdmin() ? "administrador" : "barbero"];
+  document.querySelectorAll(".sidebar nav button").forEach((b) => (b.hidden = !visibles.includes(b.dataset.screen)));
+  document.querySelectorAll(".sidebar nav button").forEach((b) => {
+    if (!esAdmin() && TEXTOS_BARBERO[b.dataset.screen]?.title) b.querySelector("span").textContent = TEXTOS_BARBERO[b.dataset.screen].title;
+  });
+  $("global-search-input").placeholder = esAdmin() ? "Buscar cliente, barbero o producto..." : "Buscar cliente...";
 }
 
 $("profile").addEventListener("click", () => {
@@ -286,10 +320,18 @@ $("profile").addEventListener("click", () => {
 });
 
 async function gestionarUsuarios() {
-  const [usuarios, roles] = await Promise.all([api("/usuarios"), api("/roles")]);
+  const [usuarios, roles, fichas] = await Promise.all([api("/usuarios"), api("/roles"), api("/barberos")]);
+  const selectFicha = (u) => {
+    if (u.rol !== "barbero") return '<span class="cell-sub">—</span>';
+    const ops = fichas
+      .filter((b) => !b.idUsuario || b.idUsuario === u.idUsuario)
+      .map((b) => `<option value="${b.idBarbero}" ${b.idBarbero === u.idBarbero ? "selected" : ""}>${h(nombre(b))}</option>`)
+      .join("");
+    return `<select class="filter-select filter-select--sm" data-ficha-user="${u.idUsuario}"><option value="0">Sin ficha</option>${ops}</select>`;
+  };
   const filas = usuarios
     .map(
-      (u) => `<tr><td>${h(u.nombreUsuario)}<span class="cell-sub">${h(u.nombreCompleto || "")}</span></td><td>${h(u.email || "—")}</td><td>${h(u.rol)}</td>
+      (u) => `<tr><td>${h(u.nombreUsuario)}<span class="cell-sub">${h(u.nombreCompleto || "")}</span></td><td>${h(u.email || "—")}</td><td>${h(u.rol)}</td><td>${selectFicha(u)}</td>
       <td>${u.activo ? statusBadge("status--success", "Activo") : statusBadge("status--neutral", "Inactivo")}</td>
       <td><button class="text-link" data-toggle-user="${u.idUsuario}" data-activo="${u.activo}">${u.activo ? "Desactivar" : "Activar"}</button></td></tr>`,
     )
@@ -299,7 +341,7 @@ async function gestionarUsuarios() {
     title: "Usuarios del sistema",
     wide: true,
     subtitle: "Las contraseñas se guardan con bcrypt + SHA-256 y los correos cifrados con AES.",
-    html: `<div class="table-wrap"><table class="mini-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
+    html: `<div class="table-wrap"><table class="mini-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Ficha de barbero</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
       <p class="form-section-title">Nuevo usuario</p>
       <div class="form-grid">
         ${campo("Usuario", "nombreUsuario", { required: true })}
@@ -320,6 +362,17 @@ async function gestionarUsuarios() {
       },
     ],
   });
+  $("form-body").querySelectorAll("[data-ficha-user]").forEach((sel) =>
+    sel.addEventListener("change", async () => {
+      try {
+        await api(`/usuarios/${sel.dataset.fichaUser}`, { method: "PUT", body: { idBarbero: Number(sel.value) } });
+        toast(Number(sel.value) ? "Cuenta vinculada a la ficha" : "Cuenta desvinculada");
+        gestionarUsuarios();
+      } catch (err) {
+        modal.error(err.message);
+      }
+    }),
+  );
   $("form-body").querySelectorAll("[data-toggle-user]").forEach((b) =>
     b.addEventListener("click", async () => {
       try {
@@ -489,8 +542,11 @@ async function detalleCita(idCita) {
     acciones.push({ label: "Reprogramar", cls: "btn--secondary", onClick: async () => (modal.cerrar(), abrirDrawerCita(c)) });
   }
   if (c.estado === "programada") acciones.push(accion("Confirmar", "btn--secondary", "confirmar", "Cita confirmada"));
-  if (pendiente) acciones.push(accion("Iniciar atención", "btn--primary", "iniciar", "Atención iniciada"));
+  if (pendiente) acciones.push(accion("Iniciar atención", "btn--secondary", "iniciar", "Atención iniciada"));
   if (["programada", "confirmada", "en_atencion"].includes(c.estado)) {
+    acciones.push({ label: "Terminé", cls: "btn--primary", onClick: async () => formTerminar(c) });
+  }
+  if (esAdmin() && ["programada", "confirmada", "en_atencion", "terminada"].includes(c.estado)) {
     acciones.push({ label: "Cobrar", cls: "btn--success", onClick: async () => (modal.cerrar(), formCobro(c)) });
   }
   modal.abrir({
@@ -502,10 +558,189 @@ async function detalleCita(idCita) {
       <div><span>Barbero</span><strong>${h(c.barbero)}</strong></div>
       <div><span>Servicios</span><strong>${c.servicios.map((s) => `${h(s.nombre)} (${fmt.dinero(s.precio)})`).join("<br>")}</strong></div>
       <div><span>Total</span><strong>${fmt.dinero(c.total)}</strong></div>
+      ${c.fechaHoraFinReal ? `<div><span>Terminó</span><strong>${fmt.hora(c.fechaHoraFinReal)}${c.minutosRetraso ? ` (+${c.minutosRetraso} min)` : ""}</strong></div>` : ""}
+      ${Number(c.propina) > 0 ? `<div><span>Propina al barbero</span><strong>${fmt.dinero(c.propina)}</strong></div>` : ""}
       ${c.observaciones ? `<div><span>Observaciones</span><strong>${h(c.observaciones)}</strong></div>` : ""}
     </div>`,
     actions: acciones,
   });
+}
+
+/* ===================================================================== MI DÍA (barbero) */
+$("midia-agendar").addEventListener("click", () => abrirDrawerCita());
+
+async function cargarMiDia() {
+  $("today-label").textContent = fmt.fechaCorta(new Date());
+  let d;
+  try {
+    d = await api("/mi-panel");
+  } catch (err) {
+    $("midia-stats").innerHTML = "";
+    $("midia-actual").innerHTML = `<div class="empty-state">${h(err.message)}<br>Pídele al administrador que vincule tu cuenta con tu ficha de barbero.</div>`;
+    $("midia-citas").innerHTML = "";
+    return;
+  }
+  const tarjeta = (iconId, cls, titulo, valor, pie) =>
+    `<article class="stat-card"><div class="stat-icon ${cls}">${icon(iconId)}</div><div><span>${titulo}</span><strong>${valor}</strong><small>${h(pie)}</small></div></article>`;
+  const t = d.barbero && d.barbero.turnoDelDia;
+  $("midia-stats").innerHTML =
+    tarjeta("calendar", "", "MIS CITAS DE HOY", d.citasDelDia, `${d.atendidas} atendidas`) +
+    tarjeta("trend", "success", "GENERADO HOY", fmt.dinero(d.generadoHoy), "Servicios que atendiste") +
+    tarjeta("money", "success", "MIS PROPINAS HOY", fmt.dinero(d.propinasHoy), "100% para ti") +
+    tarjeta("clock", d.minutosRetrasoHoy > 0 ? "warning" : "", "MI TURNO", t ? `${hhmm(t.horaInicio)}–${hhmm(t.horaFin)}` : "Libre",
+      d.minutosRetrasoHoy > 0 ? `Retraso acumulado: ${d.minutosRetrasoHoy} min` : t && t.descansoInicio ? `Descanso ${hhmm(t.descansoInicio)} – ${hhmm(t.descansoFin)}` : "Sin retrasos");
+
+  const pendientes = d.citas.filter((c) => ["programada", "confirmada", "en_atencion"].includes(c.estado));
+  const actual = d.enAtencion || pendientes[0];
+  const panel = $("midia-actual");
+  if (!actual) {
+    panel.innerHTML = `<div class="panel-heading"><div><span class="eyebrow">AHORA</span><h3>Sin citas pendientes</h3></div></div><div class="empty-state">No tienes más citas hoy. Puedes agendar una con “+ Agendar”.</div>`;
+  } else {
+    const atendiendo = actual.estado === "en_atencion";
+    const e = estadoCita(actual.estado);
+    panel.innerHTML = `<div class="panel-heading"><div><span class="eyebrow">${atendiendo ? "ATENDIENDO AHORA" : "SIGUIENTE CITA"}</span><h3>${h(actual.cliente)}</h3></div>${statusBadge(e.cls, e.label)}</div>
+      <div class="atendiendo-body">
+        <div class="atendiendo-hora"><strong>${fmt.hora(actual.fechaHoraInicio)}</strong><span>hasta ${fmt.hora(actual.fechaHoraFin)}</span></div>
+        <div><strong>${h(actual.servicios.map((s) => s.nombre).join(" + "))}</strong><span>${fmt.dinero(actual.total)}${actual.observaciones ? " · " + h(actual.observaciones) : ""}</span></div>
+      </div>
+      <div class="atendiendo-acciones">
+        ${atendiendo ? "" : '<button class="btn btn--secondary" id="midia-iniciar">Iniciar atención</button>'}
+        <button class="btn btn--primary" id="midia-termine">Terminé ${icon("check", 18)}</button>
+      </div>`;
+    if (!atendiendo)
+      $("midia-iniciar").addEventListener("click", () =>
+        intentar(() => api(`/citas/${actual.idCita}/iniciar`, { method: "PATCH" }), "Atención iniciada").then(refrescarPantalla),
+      );
+    $("midia-termine").addEventListener("click", () => formTerminar(actual));
+  }
+
+  const lista = $("midia-citas");
+  lista.innerHTML = d.citas.length
+    ? d.citas
+        .map((c) => {
+          const e = estadoCita(c.estado);
+          const extra = Number(c.propina) > 0 ? ` · propina ${fmt.dinero(c.propina)}` : "";
+          return `<div class="appointment-row"><div class="time"><strong>${fmt.hora(c.fechaHoraInicio)}</strong><span>${fmt.hora(c.fechaHoraFin)}</span></div><div class="avatar">${h(fmt.iniciales(c.cliente))}</div><div class="appointment-main"><strong>${h(c.cliente)}</strong><span>${h(c.servicios.map((s) => s.nombre).join(" + "))}${h(extra)}</span></div>${statusBadge(e.cls, e.label)}<button class="row-action" aria-label="Ver detalle" data-cita="${c.idCita}">${icon("chevron", 18)}</button></div>`;
+        })
+        .join("")
+    : '<div class="empty-state">No tienes citas hoy.</div>';
+  lista.querySelectorAll("[data-cita]").forEach((b) => b.addEventListener("click", () => detalleCita(Number(b.dataset.cita))));
+
+  notificaciones = pendientes.slice(0, 3).map((c) => ({ texto: `${fmt.hora(c.fechaHoraInicio)} · ${c.cliente}`, detalle: c.servicios.map((s) => s.nombre).join(" + "), ir: "midia" }));
+  $("notification-dot").hidden = notificaciones.length === 0;
+}
+
+/* ===================================================================== MI HORARIO (solo lectura) */
+async function cargarMiHorario() {
+  const turnosBody = $("mihorario-turnos");
+  const ausBody = $("mihorario-ausencias");
+  filaCargando(turnosBody, 4);
+  filaCargando(ausBody, 4);
+  const yo = (await api("/barberos/resumen"))[0];
+  if (!yo) {
+    filaVacia(turnosBody, 4, "Tu cuenta aún no está vinculada a una ficha de barbero. Habla con el administrador.");
+    return filaVacia(ausBody, 4, "—");
+  }
+  const [turnos, ausencias] = await Promise.all([api(`/turnos/barbero/${yo.idBarbero}`), api(`/ausencias/barbero/${yo.idBarbero}`)]);
+  const hoyDia = ((new Date().getDay() + 6) % 7) + 1;
+  turnosBody.innerHTML = DIAS.slice(1)
+    .map((dia, i) => {
+      const t = turnos.find((x) => x.diaSemana === i + 1);
+      const marca = i + 1 === hoyDia ? ' class="row-today"' : "";
+      return t
+        ? `<tr${marca}><td><strong>${dia}</strong>${i + 1 === hoyDia ? '<span class="cell-sub">Hoy</span>' : ""}</td><td>${hhmm(t.horaInicio)}</td><td>${hhmm(t.horaFin)}</td><td>${t.descansoInicio ? `${hhmm(t.descansoInicio)} – ${hhmm(t.descansoFin)}` : "—"}</td></tr>`
+        : `<tr${marca}><td><strong>${dia}</strong></td><td colspan="3"><span class="cell-sub">Libre</span></td></tr>`;
+    })
+    .join("");
+  const hoy = fmt.iso(new Date());
+  const vigentes = ausencias.filter((a) => a.fechaFin >= hoy).sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio));
+  if (!vigentes.length) filaVacia(ausBody, 4, "No tienes ausencias próximas");
+  else
+    ausBody.innerHTML = vigentes
+      .map((a) => `<tr><td>${h(TIPOS_AUSENCIA[a.tipo] || a.tipo)}</td><td>${h(fmt.fechaCorta(a.fechaInicio))}</td><td>${h(fmt.fechaCorta(a.fechaFin))}</td><td>${h(a.motivo || "—")}</td></tr>`)
+      .join("");
+}
+
+/* ===================================================================== TERMINÉ: cierre de la cita + propina */
+const horaLocal = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+async function formTerminar(c) {
+  const dia = c.fechaHoraInicio.substring(0, 10);
+  const ahora = new Date();
+  const horaFin = fmt.iso(ahora) === dia ? horaLocal(ahora) : fmt.hora(c.fechaHoraFin);
+  modal.abrir({
+    eyebrow: "TERMINÉ",
+    title: `Cerrar la cita de ${c.cliente}`,
+    subtitle: `${c.servicios.map((s) => s.nombre).join(" + ")} · programada ${fmt.hora(c.fechaHoraInicio)} – ${fmt.hora(c.fechaHoraFin)}`,
+    html: `<div class="form-grid">
+        ${campo("¿A qué hora terminaste?", "horaFin", { type: "time", value: horaFin, required: true })}
+        ${campo("Propina que te dieron", "propina", { type: "number", value: 0, attrs: 'min="0" step="500"', placeholder: "0" })}
+      </div>
+      <div class="propina-rapida" id="propina-rapida">
+        <button type="button" class="chip selected" data-p="0">Sin propina</button>
+        <button type="button" class="chip" data-p="2000">$2.000</button>
+        <button type="button" class="chip" data-p="5000">$5.000</button>
+        <button type="button" class="chip" data-p="10000">$10.000</button>
+      </div>
+      <p class="form-hint">La propina es 100% tuya y sale aparte en tu liquidación. Si te dieron la propina en caja, la registra quien cobra.</p>
+      <div id="terminar-preview" class="terminar-preview"></div>`,
+    actions: [
+      { label: "Cancelar", cls: "btn--secondary" },
+      {
+        label: "Terminé",
+        cls: "btn--primary",
+        onClick: async (v) => {
+          if (!v.horaFin) throw new Error("Indica la hora en que terminaste");
+          if (v.propina !== null && v.propina < 0) throw new Error("La propina no puede ser negativa");
+          const r = await api(`/citas/${c.idCita}/terminar`, {
+            method: "POST",
+            body: { propina: v.propina || 0, fechaHoraFinReal: `${dia}T${v.horaFin}:00` },
+          });
+          modal.cerrar();
+          const corridas = r.citasCorridas.length;
+          toast(
+            `Cita terminada${Number(v.propina) > 0 ? ` · propina ${fmt.dinero(v.propina)}` : ""}` +
+              (corridas ? ` · se corrieron ${corridas} cita(s) siguiente(s)` : ""),
+          );
+          refrescarPantalla();
+        },
+      },
+    ],
+  });
+  const body = $("form-body");
+  const inpPropina = body.querySelector('[name="propina"]');
+  const inpHora = body.querySelector('[name="horaFin"]');
+  const chips = body.querySelectorAll("#propina-rapida [data-p]");
+  const marcarChip = () => chips.forEach((b) => b.classList.toggle("selected", Number(b.dataset.p) === Number(inpPropina.value || 0)));
+  chips.forEach((b) =>
+    b.addEventListener("click", () => {
+      inpPropina.value = b.dataset.p;
+      marcarChip();
+    }),
+  );
+  inpPropina.addEventListener("input", marcarChip);
+
+  const preview = async () => {
+    const cont = $("terminar-preview");
+    if (!cont || !inpHora.value) return;
+    try {
+      const r = await api(`/citas/${c.idCita}/terminar`, { query: { fechaHoraFinReal: `${dia}T${inpHora.value}:00` } });
+      const retraso = r.minutosRetraso > 0
+        ? `<div class="preview-line warning"><span>Vas <strong>${r.minutosRetraso} min</strong> tarde respecto a lo programado.</span></div>`
+        : `<div class="preview-line ok"><span>Terminaste a tiempo.</span></div>`;
+      const corridas = r.citasCorridas.length
+        ? `<p class="form-section-title">Se correrán estas citas</p>` +
+          r.citasCorridas
+            .map((x) => `<div class="preview-line${x.fueraDeTurno ? " warning" : ""}"><span>${h(x.cliente)}</span><span>${fmt.hora(x.inicioAntes)} → <strong>${fmt.hora(x.inicioDespues)}</strong>${x.fueraDeTurno ? " · queda fuera de tu turno o en tu descanso" : ""}</span></div>`)
+            .join("")
+        : r.minutosRetraso > 0 ? '<div class="preview-line"><span>No se cruza con tu siguiente cita; nada se corre.</span></div>' : "";
+      cont.innerHTML = retraso + corridas;
+    } catch (err) {
+      cont.innerHTML = `<div class="preview-line warning"><span>${h(err.message)}</span></div>`;
+    }
+  };
+  inpHora.addEventListener("change", preview);
+  preview();
 }
 
 function refrescarPantalla() {
@@ -1036,7 +1271,7 @@ $("com-exportar").addEventListener("click", exportarComisiones);
 
 async function cargarComisiones() {
   const tbody = $("comisiones-body");
-  filaCargando(tbody, 7);
+  filaCargando(tbody, 8);
   const desde = $("com-desde").value;
   const hasta = $("com-hasta").value;
   const r = await api("/comisiones/resumen", { query: { desde, hasta } });
@@ -1044,11 +1279,12 @@ async function cargarComisiones() {
   const periodo = `${fmt.fechaCorta(desde)} – ${fmt.fechaCorta(hasta)}`;
   $("comisiones-stats").innerHTML = `
     <article class="stat-card"><div class="stat-icon">${icon("trend")}</div><div><span>TOTAL GENERADO</span><strong>${fmt.dinero(r.totalGenerado)}</strong><small>${h(periodo)}</small></div></article>
-    <article class="stat-card"><div class="stat-icon">${icon("money")}</div><div><span>A LIQUIDAR</span><strong>${fmt.dinero(r.totalALiquidar)}</strong><small>Servicios + productos</small></div></article>`;
-  if (!r.barberos.length) return filaVacia(tbody, 7, "No hay barberos registrados");
+    <article class="stat-card"><div class="stat-icon success">${icon("money")}</div><div><span>PROPINAS</span><strong>${fmt.dinero(r.totalPropinas)}</strong><small>100% del barbero</small></div></article>
+    <article class="stat-card"><div class="stat-icon">${icon("money")}</div><div><span>${esAdmin() ? "A LIQUIDAR" : "ME TOCA"}</span><strong>${fmt.dinero(r.totalALiquidar)}</strong><small>Comisiones + propinas</small></div></article>`;
+  if (!r.barberos.length) return filaVacia(tbody, 8, esAdmin() ? "No hay barberos registrados" : "Tu cuenta aún no está vinculada a una ficha de barbero");
   tbody.innerHTML = r.barberos
     .map(
-      (b) => `<tr><td><div class="name-cell"><div class="avatar">${h(fmt.iniciales(b.barbero))}</div><strong>${h(b.barbero)}</strong></div></td><td>${b.cantidad_servicios}</td><td>${b.cantidad_productos}</td><td>${fmt.dinero(b.ventas_generadas)}</td><td>${fmt.dinero(b.comision_servicios)}</td><td>${fmt.dinero(b.comision_productos)}</td><td><strong>${fmt.dinero(b.comision_total)}</strong></td></tr>`,
+      (b) => `<tr><td><div class="name-cell"><div class="avatar">${h(fmt.iniciales(b.barbero))}</div><strong>${h(b.barbero)}</strong></div></td><td>${b.cantidad_servicios}</td><td>${b.cantidad_productos}</td><td>${fmt.dinero(b.ventas_generadas)}</td><td>${fmt.dinero(b.comision_servicios)}</td><td>${fmt.dinero(b.comision_productos)}</td><td>${fmt.dinero(b.propinas)}${b.cantidad_propinas ? `<span class="cell-sub">${b.cantidad_propinas} propina(s)</span>` : ""}</td><td><strong>${fmt.dinero(b.total_a_pagar)}</strong><span class="cell-sub">Comisión ${fmt.dinero(b.comision_total)}</span></td></tr>`,
     )
     .join("");
   aplicarBusquedaTabla("comisiones");
@@ -1056,9 +1292,9 @@ async function cargarComisiones() {
 
 function exportarComisiones() {
   if (!ultimoReporte) return toast("Primero consulta un periodo", "error");
-  const cab = ["Barbero", "Servicios", "Total servicios", "Comisión servicios", "Productos", "Total productos", "Comisión productos", "Ventas generadas", "A liquidar"];
-  const filas = ultimoReporte.barberos.map((b) => [b.barbero, b.cantidad_servicios, b.total_servicios, b.comision_servicios, b.cantidad_productos, b.total_productos, b.comision_productos, b.ventas_generadas, b.comision_total]);
-  const csv = [cab, ...filas, [], ["Total generado", ultimoReporte.totalGenerado], ["Total a liquidar", ultimoReporte.totalALiquidar]]
+  const cab = ["Barbero", "Servicios", "Total servicios", "Comisión servicios", "Productos", "Total productos", "Comisión productos", "Ventas generadas", "Comisión total", "Propinas", "A liquidar"];
+  const filas = ultimoReporte.barberos.map((b) => [b.barbero, b.cantidad_servicios, b.total_servicios, b.comision_servicios, b.cantidad_productos, b.total_productos, b.comision_productos, b.ventas_generadas, b.comision_total, b.propinas, b.total_a_pagar]);
+  const csv = [cab, ...filas, [], ["Total generado", ultimoReporte.totalGenerado], ["Total propinas", ultimoReporte.totalPropinas], ["Total a liquidar", ultimoReporte.totalALiquidar]]
     .map((f) => f.map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(";"))
     .join("\r\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
@@ -1084,7 +1320,7 @@ async function cargarClientes() {
   tbody.innerHTML = filtrada
     .map(
       (c) => `<tr><td><div class="name-cell"><div class="avatar">${h(fmt.iniciales(nombre(c)))}</div><strong>${h(nombre(c))}</strong></div></td><td>${h(fmt.telefono(c.telefono))}${c.email ? `<span class="cell-sub">${h(c.email)}</span>` : ""}</td><td>${h(fmt.fechaHoraRelativa(c.ultimaVisita))}${c.proximaCita ? `<span class="cell-sub">Próxima: ${h(fmt.fechaHoraRelativa(c.proximaCita))}</span>` : ""}</td><td>${h(c.preferenciasCorte || "—")}</td><td>${c.visitas}</td>
-      <td><div class="row-actions"><button class="row-action" data-ver="${c.idCliente}" aria-label="Ver detalle">${icon("chevron", 18)}</button><button class="row-action" data-editar="${c.idCliente}" aria-label="Editar">${icon("edit", 18)}</button><button class="row-action danger" data-borrar="${c.idCliente}" aria-label="Eliminar">${icon("trash", 18)}</button></div></td></tr>`,
+      <td><div class="row-actions"><button class="row-action" data-ver="${c.idCliente}" aria-label="Ver detalle">${icon("chevron", 18)}</button>${esAdmin() ? `<button class="row-action" data-editar="${c.idCliente}" aria-label="Editar">${icon("edit", 18)}</button><button class="row-action danger" data-borrar="${c.idCliente}" aria-label="Eliminar">${icon("trash", 18)}</button>` : ""}</div></td></tr>`,
     )
     .join("");
   tbody.querySelectorAll("[data-ver]").forEach((b) => b.addEventListener("click", () => detalleCliente(Number(b.dataset.ver))));
@@ -1143,7 +1379,7 @@ async function detalleCliente(idCliente) {
       <div class="table-wrap"><table class="mini-table"><thead><tr><th>Fecha</th><th>Servicios</th><th>Barbero</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table></div>`,
     actions: [
       { label: "Cerrar", cls: "btn--secondary" },
-      { label: "Editar", cls: "btn--secondary", onClick: async () => formCliente(c) },
+      ...(esAdmin() ? [{ label: "Editar", cls: "btn--secondary", onClick: async () => formCliente(c) }] : []),
       {
         label: "Agendar cita",
         onClick: async () => {
@@ -1272,7 +1508,8 @@ async function cargarCaja() {
     tarjeta("money", "", "APERTURA", fmt.dinero(a.monto_apertura), r.abierta ? "Base en efectivo" : "Caja cerrada") +
     tarjeta("money", "success", "EFECTIVO", fmt.dinero(a.total_efectivo), `Esperado en caja: ${fmt.dinero(a.efectivo_esperado)}`) +
     tarjeta("trend", "", "TARJETA + TRANSFERENCIA", fmt.dinero(Number(a.total_tarjeta || 0) + Number(a.total_transferencia || 0)), `Tarjeta ${fmt.dinero(a.total_tarjeta)} · Transf. ${fmt.dinero(a.total_transferencia)}`) +
-    tarjeta("trend", "success", "TOTAL VENDIDO", fmt.dinero(a.total_vendido), "Ventas pagadas");
+    tarjeta("trend", "success", "TOTAL VENDIDO", fmt.dinero(a.total_vendido), "Ventas pagadas (sin propinas)") +
+    tarjeta("money", "", "PROPINAS", fmt.dinero(a.total_propinas), `Para los barberos · cobrado ${fmt.dinero(a.total_cobrado)}`);
 
   const acciones = $("caja-acciones");
   if (r.abierta) {
@@ -1298,7 +1535,7 @@ async function cargarCaja() {
     .map((v) => {
       const cli = clientePorId(v.idCliente);
       const bar = barberoPorId(v.idBarbero);
-      return `<tr><td>#${v.idVenta}${v.idCita ? `<span class="cell-sub">Cita #${v.idCita}</span>` : '<span class="cell-sub">Productos</span>'}</td><td>${fmt.hora(v.fechaHora)}</td><td>${h(cli ? nombre(cli) : "Ocasional")}</td><td>${h(bar ? nombre(bar) : "—")}</td><td>${fmt.dinero(v.total)}</td><td>${v.estado === "pagada" ? statusBadge("status--success", "Pagada") : statusBadge("status--error", "Anulada")}</td><td><button class="row-action" data-venta="${v.idVenta}" aria-label="Ver detalle">${icon("chevron")}</button></td></tr>`;
+      return `<tr><td>#${v.idVenta}${v.idCita ? `<span class="cell-sub">Cita #${v.idCita}</span>` : '<span class="cell-sub">Productos</span>'}</td><td>${fmt.hora(v.fechaHora)}</td><td>${h(cli ? nombre(cli) : "Ocasional")}</td><td>${h(bar ? nombre(bar) : "—")}</td><td>${fmt.dinero(v.total)}${Number(v.propina) > 0 ? `<span class="cell-sub">+ propina ${fmt.dinero(v.propina)}</span>` : ""}</td><td>${v.estado === "pagada" ? statusBadge("status--success", "Pagada") : statusBadge("status--error", "Anulada")}</td><td><button class="row-action" data-venta="${v.idVenta}" aria-label="Ver detalle">${icon("chevron")}</button></td></tr>`;
     })
     .join("");
   tbody.querySelectorAll("[data-venta]").forEach((b) => b.addEventListener("click", () => detalleVenta(Number(b.dataset.venta))));
@@ -1382,12 +1619,13 @@ async function historialCajas() {
 
 async function elegirCitaACobrar() {
   const hoy = fmt.iso(new Date());
-  const citas = (await api("/citas", { query: { desde: hoy, hasta: hoy } })).filter((c) => ["programada", "confirmada", "en_atencion"].includes(c.estado));
+  const citas = (await api("/citas", { query: { desde: hoy, hasta: hoy } })).filter((c) => ["terminada", "en_atencion", "programada", "confirmada"].includes(c.estado))
+    .sort((a, b) => (a.estado === "terminada" ? 0 : 1) - (b.estado === "terminada" ? 0 : 1));
   if (!citas.length) return toast("No hay citas pendientes de cobro hoy", "error");
   modal.abrir({
     eyebrow: "COBRAR",
     title: "¿Qué cita vas a cobrar?",
-    html: campo("Cita", "idCita", { options: citas.map((c) => [c.idCita, `${fmt.hora(c.fechaHoraInicio)} · ${c.cliente} · ${c.servicios.map((s) => s.nombre).join(" + ")} · ${fmt.dinero(c.total)}`]) }),
+    html: campo("Cita", "idCita", { options: citas.map((c) => [c.idCita, `${c.estado === "terminada" ? "✓ " : ""}${fmt.hora(c.fechaHoraInicio)} · ${c.cliente} · ${c.servicios.map((s) => s.nombre).join(" + ")} · ${fmt.dinero(c.total)}`]) }),
     actions: [
       { label: "Cancelar", cls: "btn--secondary" },
       { label: "Continuar", onClick: async (v) => formCobro(citas.find((c) => c.idCita === Number(v.idCita))) },
@@ -1425,9 +1663,14 @@ async function formCobro(cita) {
         <label class="simple-field"><span>Cantidad</span><input type="number" id="cobro-cantidad" value="1" min="1"></label><span></span>
         <button type="button" class="btn btn--secondary btn--sm" id="cobro-agregar" aria-label="Agregar">${icon("plus", 16)}</button></div>
       <table class="mini-table"><tbody id="cobro-items"></tbody></table>
+      <p class="form-section-title">Propina para el barbero</p>
+      <div class="pay-row pay-row--propina"><label class="simple-field"><span>Propina</span><input type="number" id="cobro-propina" min="0" step="500" value="0"></label>
+        <div class="propina-rapida" id="cobro-propina-rapida"><button type="button" class="chip" data-p="0">Sin propina</button><button type="button" class="chip" data-p="2000">$2.000</button><button type="button" class="chip" data-p="5000">$5.000</button><button type="button" class="chip" data-p="10000">$10.000</button></div></div>
+      <p class="form-hint" id="cobro-propina-nota">${cita && Number(cita.propina) > 0 ? `El barbero ya registró ${fmt.dinero(cita.propina)} de propina al terminar (en mano). Aquí solo agrega la que el cliente pague en caja.` : "Va 100% al barbero y no cuenta como venta ni comisión."}</p>
       <p class="form-section-title">Pagos</p>
       <div id="cobro-pagos"></div>
       <button type="button" class="text-link" id="cobro-agregar-pago">+ Agregar otro medio de pago</button>
+      <div class="totals"><span>Venta</span><span id="cobro-venta"></span></div>
       <div class="totals"><span>Total a cobrar</span><strong id="cobro-total"></strong></div>
       <div class="totals"><span>Pagado</span><span id="cobro-pagado"></span></div>`,
     actions: [
@@ -1442,12 +1685,17 @@ async function formCobro(cita) {
             referencia: row.querySelector(".p-ref").value.trim() || null,
           })).filter((p) => p.monto > 0);
           if (!pagos.length) throw new Error("Agrega al menos un pago");
+          const propina = propinaActual();
+          if (propina < 0) throw new Error("La propina no puede ser negativa");
+          const idBarberoVenta = cita ? cita.idBarbero : v.idBarbero ? Number(v.idBarbero) : null;
+          if (propina > 0 && !idBarberoVenta) throw new Error("Elige el barbero que recibe la propina");
           const cuerpo = {
             idCaja: estado.caja.idCaja,
             idCita: cita ? cita.idCita : null,
             idCliente: cita ? null : v.idCliente ? Number(v.idCliente) : null,
             idBarbero: cita ? null : v.idBarbero ? Number(v.idBarbero) : null,
             productos: items.map((i) => ({ idProducto: i.idProducto, cantidad: i.cantidad })),
+            propina,
             pagos,
           };
           await api("/ventas", { method: "POST", body: cuerpo });
@@ -1460,7 +1708,9 @@ async function formCobro(cita) {
   });
 
   const items = [];
-  const total = () => totalCita + items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const propinaActual = () => Math.max(0, Number($("cobro-propina").value || 0));
+  const venta = () => totalCita + items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const total = () => venta() + propinaActual();
   const pintarItems = () => {
     $("cobro-items").innerHTML = items
       .map((i, n) => `<tr><td>${h(i.nombre)}</td><td>${i.cantidad} × ${fmt.dinero(i.precio)}</td><td>${fmt.dinero(i.precio * i.cantidad)}</td><td><button type="button" class="row-action danger" data-quitar="${n}" aria-label="Quitar">${icon("trash", 16)}</button></td></tr>`)
@@ -1471,6 +1721,7 @@ async function formCobro(cita) {
         pintarItems();
       }),
     );
+    $("cobro-venta").textContent = fmt.dinero(venta()) + (propinaActual() ? ` + propina ${fmt.dinero(propinaActual())}` : "");
     $("cobro-total").textContent = fmt.dinero(total());
     const pagosEl = $("form-body").querySelectorAll(".p-monto");
     if (pagosEl.length === 1) pagosEl[0].value = total();
@@ -1515,6 +1766,17 @@ async function formCobro(cita) {
     const pagado = [...$("form-body").querySelectorAll(".p-monto")].reduce((s, el) => s + Number(el.value || 0), 0);
     agregarPago(Math.max(total() - pagado, 0));
   });
+  const chipsPropina = $("form-body").querySelectorAll("#cobro-propina-rapida [data-p]");
+  const marcarPropina = () => chipsPropina.forEach((b) => b.classList.toggle("selected", Number(b.dataset.p) === propinaActual()));
+  chipsPropina.forEach((b) =>
+    b.addEventListener("click", () => {
+      $("cobro-propina").value = b.dataset.p;
+      marcarPropina();
+      pintarItems();
+    }),
+  );
+  $("cobro-propina").addEventListener("input", () => (marcarPropina(), pintarItems()));
+  marcarPropina();
   agregarPago(total());
   pintarItems();
 }
@@ -1528,6 +1790,8 @@ async function detalleVenta(idVenta) {
         return `<div><span>${h(p ? p.nombre : "Producto " + d.idProducto)} × ${d.cantidad}</span><strong>${fmt.dinero(d.subtotal ?? d.precioUnitario * d.cantidad)}</strong></div>`;
       }).join("")
     : "";
+  const propinaVenta = Number(v.propina) > 0
+    ? `<div><span>Propina para ${h(nombre(barberoPorId(v.idBarbero)) || "el barbero")}</span><strong>${fmt.dinero(v.propina)}</strong></div>` : "";
   const pagos = r.pagos.map((p) => `<div><span>${h(p.medioPago)}${p.referencia ? " · " + h(p.referencia) : ""}</span><strong>${fmt.dinero(p.monto)}</strong></div>`).join("");
   const acciones = [{ label: "Cerrar", cls: "btn--secondary" }];
   if (v.estado === "pagada") {
@@ -1544,9 +1808,9 @@ async function detalleVenta(idVenta) {
   }
   modal.abrir({
     eyebrow: `VENTA #${v.idVenta}`,
-    title: fmt.dinero(v.total),
+    title: fmt.dinero(Number(v.total) + Number(v.propina || 0)),
     subtitle: `${fmt.fechaHoraRelativa(v.fechaHora)} · ${v.estado === "pagada" ? "Pagada" : "Anulada"}${v.idCita ? " · Cita #" + v.idCita : ""}`,
-    html: `<div class="detail-list">${productos}${pagos}</div>`,
+    html: `<div class="detail-list">${productos}${propinaVenta}${pagos}</div>`,
     actions: acciones,
   });
 }
@@ -1560,5 +1824,5 @@ async function detalleVenta(idVenta) {
   } catch (err) {
     toast(err.message, "error");
   }
-  navigate("dashboard");
+  navigate(esAdmin() ? "dashboard" : "midia");
 })();

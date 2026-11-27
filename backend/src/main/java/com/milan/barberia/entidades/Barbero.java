@@ -21,7 +21,7 @@ public class Barbero {
 
     private Integer idUsuario;
 
-    @NotBlank
+    /** Puede quedar vacío si la ficha se creó desde "Crear cuenta"; lo completa el administrador. */
     private String documento;
 
     @NotBlank
@@ -30,7 +30,6 @@ public class Barbero {
     @NotBlank
     private String apellidos;
 
-    @NotBlank
     private String telefono;
 
     @NotNull

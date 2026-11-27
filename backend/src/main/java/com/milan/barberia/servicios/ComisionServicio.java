@@ -18,29 +18,39 @@ public class ComisionServicio {
 
     private final ReporteRepositorio reportes;
 
-    public List<Map<String, Object>> calcular(LocalDate desde, LocalDate hasta) {
+    /** soloBarbero = id del barbero de la sesión (null = todos, para el administrador). */
+    public List<Map<String, Object>> calcular(LocalDate desde, LocalDate hasta, Integer soloBarbero) {
         if (desde == null || hasta == null) {
             throw new ExcepcionNegocio("Indica las fechas desde y hasta");
         }
         if (hasta.isBefore(desde)) {
             throw new ExcepcionNegocio("La fecha final no puede ser anterior a la inicial");
         }
-        return reportes.comisiones(desde, hasta);
+        List<Map<String, Object>> filas = reportes.comisiones(desde, hasta);
+        if (soloBarbero == null) {
+            return filas;
+        }
+        return filas.stream()
+                .filter(f -> soloBarbero.longValue() == ConversorDatos.aLong(f.get("id_barbero")))
+                .toList();
     }
 
     /** Lo mismo que {@link #calcular} más los totales que muestra la pantalla de Comisiones. */
-    public Map<String, Object> resumen(LocalDate desde, LocalDate hasta) {
-        List<Map<String, Object>> filas = calcular(desde, hasta);
+    public Map<String, Object> resumen(LocalDate desde, LocalDate hasta, Integer soloBarbero) {
+        List<Map<String, Object>> filas = calcular(desde, hasta, soloBarbero);
         BigDecimal generado = BigDecimal.ZERO;
         BigDecimal liquidar = BigDecimal.ZERO;
+        BigDecimal propinas = BigDecimal.ZERO;
         for (Map<String, Object> f : filas) {
             generado = generado.add(ConversorDatos.aDecimal(f.get("ventas_generadas")));
-            liquidar = liquidar.add(ConversorDatos.aDecimal(f.get("comision_total")));
+            liquidar = liquidar.add(ConversorDatos.aDecimal(f.get("total_a_pagar")));
+            propinas = propinas.add(ConversorDatos.aDecimal(f.get("propinas")));
         }
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("desde", desde);
         r.put("hasta", hasta);
         r.put("totalGenerado", generado);
+        r.put("totalPropinas", propinas);
         r.put("totalALiquidar", liquidar);
         r.put("barberos", filas);
         return r;

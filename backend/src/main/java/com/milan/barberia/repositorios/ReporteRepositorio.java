@@ -62,6 +62,14 @@ public class ReporteRepositorio {
                 Date.valueOf(desde), Date.valueOf(hasta));
     }
 
+    /** Propinas cobradas en caja para un barbero en un día. */
+    public BigDecimal propinasCajaDelDia(Integer idBarbero, LocalDate dia) {
+        BigDecimal total = jdbc.queryForObject(
+                "SELECT IFNULL(SUM(propina), 0) FROM venta WHERE estado = 'pagada' AND id_barbero = ? AND DATE(fecha_hora) = ?",
+                BigDecimal.class, idBarbero, Date.valueOf(dia));
+        return total == null ? BigDecimal.ZERO : total;
+    }
+
     /** Citas del día que no fueron canceladas. */
     public long citasDelDia(LocalDate dia) {
         Long n = jdbc.queryForObject(
